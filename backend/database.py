@@ -24,6 +24,10 @@ async def init_db():
         report TEXT,
         recommendation TEXT,
         repo_analysis TEXT,
+        track_b_evaluation TEXT,
+        weighted_score REAL,
+        reviewed_by TEXT,
+        analyzed_by TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         analyzed_at TEXT
     );
@@ -40,6 +44,40 @@ async def init_db():
         activity_level TEXT,
         last_scanned TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        role TEXT DEFAULT 'viewer',
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS team_skills (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_email TEXT NOT NULL,
+        github_username TEXT NOT NULL,
+        name TEXT NOT NULL,
+        skills TEXT NOT NULL,
+        UNIQUE(user_email)
+    );
     """)
+
+    # Pre-populate users and team_skills
+    team_data = [
+        ("Kevin", "kevin@tokamak.network", "admin", "ggs134", "protocol,tokenomics,smart-contracts,ethereum,solidity"),
+        ("Jaden", "jaden@tokamak.network", "reviewer", "Jaden-Kong", "fullstack,ops,devops,typescript,javascript,python"),
+        ("Mehdi", "mehdi@tokamak.network", "reviewer", "Mehd1b", "frontend,react,typescript,javascript,css,ui"),
+        ("Jason", "jason@tokamak.network", "reviewer", "SonYoungsung", "l2,bridge,rollup,ethereum,solidity,typescript"),
+    ]
+
+    for name, email, role, github, skills in team_data:
+        await db.execute(
+            "INSERT OR IGNORE INTO users (name, email, role) VALUES (?, ?, ?)",
+            (name, email, role)
+        )
+        await db.execute(
+            "INSERT OR IGNORE INTO team_skills (user_email, github_username, name, skills) VALUES (?, ?, ?, ?)",
+            (email, github, name, skills)
+        )
+
     await db.commit()
     await db.close()

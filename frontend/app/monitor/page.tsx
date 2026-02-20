@@ -106,6 +106,9 @@ export default function MonitorPage() {
   const [scanResult, setScanResult] = useState<any>(null);
   const [activityFilter, setActivityFilter] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [findingLinkedIn, setFindingLinkedIn] = useState(false);
+  const [findingOne, setFindingOne] = useState<string | null>(null);
+  const [linkedInResult, setLinkedInResult] = useState<any>(null);
 
   const load = (filter?: string) => {
     const f = filter ?? activityFilter;
@@ -135,6 +138,30 @@ export default function MonitorPage() {
     setScanning(false);
   };
 
+  const findLinkedInAll = async () => {
+    setFindingLinkedIn(true);
+    setLinkedInResult(null);
+    try {
+      const res = await fetch(`${API}/api/monitor/find-linkedin`, { method: "POST" });
+      const data = await res.json();
+      setLinkedInResult(data);
+      load();
+    } catch {
+      setLinkedInResult({ error: "Failed to search LinkedIn" });
+    }
+    setFindingLinkedIn(false);
+  };
+
+  const findLinkedInOne = async (username: string) => {
+    setFindingOne(username);
+    try {
+      const res = await fetch(`${API}/api/monitor/find-linkedin/${username}`, { method: "POST" });
+      await res.json();
+      load();
+    } catch {}
+    setFindingOne(null);
+  };
+
   const avgScore = (scores: Record<string, number>) => {
     if (!scores) return "-";
     const vals = Object.values(scores);
@@ -150,6 +177,10 @@ export default function MonitorPage() {
           className="px-3 py-1.5 rounded text-sm disabled:opacity-50 text-white bg-[#1C1C1C] hover:bg-gray-800">
           {scanning ? "⏳ Scanning (약 2분 소요)..." : "Scan Now"}
         </button>
+        <button onClick={findLinkedInAll} disabled={findingLinkedIn}
+          className="px-3 py-1.5 rounded text-sm disabled:opacity-50 text-white bg-blue-600 hover:bg-blue-700">
+          {findingLinkedIn ? "⏳ Searching..." : "🔗 Find LinkedIn"}
+        </button>
       </div>
 
       {scanResult && (
@@ -163,6 +194,16 @@ export default function MonitorPage() {
             </div>
           ) : (
             <span className="text-green-700">✅ Scanned {scanResult.repos_scanned} repos, found {scanResult.external_users_found} external users, analyzed {scanResult.profiles_analyzed} profiles</span>
+          )}
+        </div>
+      )}
+
+      {linkedInResult && (
+        <div className={`mb-4 p-3 rounded text-sm border ${linkedInResult.error ? 'border-red-200 bg-red-50' : 'border-blue-200 bg-blue-50'}`}>
+          {linkedInResult.error ? (
+            <span className="text-red-600">⚠️ {linkedInResult.error}</span>
+          ) : (
+            <span className="text-blue-700">🔗 Checked {linkedInResult.checked} candidates, found {linkedInResult.found} LinkedIn profiles</span>
           )}
         </div>
       )}
@@ -199,6 +240,7 @@ export default function MonitorPage() {
               <th className="py-3 px-4">Repos</th>
               <th className="py-3 px-4">Languages</th>
               <th className="py-3 px-4">Avg Score</th>
+              <th className="py-3 px-4">LinkedIn</th>
               <th className="py-3 px-4">Last Active</th>
             </tr></thead>
             <tbody>
@@ -225,11 +267,32 @@ export default function MonitorPage() {
                         {c.scores ? avgScore(c.scores) : "-"}
                       </span>
                     </td>
+                    <td className="py-3 px-4">
+                      {c.linkedin_url ? (
+                        <a href={c.linkedin_url} target="_blank" onClick={e => e.stopPropagation()} className="text-blue-600 hover:text-blue-800" title={c.linkedin_url}>🔗</a>
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <span className="text-gray-300">–</span>
+                          <button
+                            onClick={e => { e.stopPropagation(); findLinkedInOne(c.github_username); }}
+                            disabled={findingOne === c.github_username}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-500 disabled:opacity-50"
+                          >
+                            {findingOne === c.github_username ? "..." : "Find"}
+                          </button>
+                        </span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-xs text-gray-400">{c.last_scanned ? new Date(c.last_scanned).toLocaleDateString('ko-KR') : "-"}</td>
                   </tr>
                   {expanded === c.github_username && (
                     <tr key={c.github_username + "-detail"}>
-                      <td colSpan={7}>
+                      <td colSpan={8}>
+                        {c.linkedin_url && (
+                          <div className="px-3 pt-2 text-sm">
+                            <a href={c.linkedin_url} target="_blank" className="text-blue-600 hover:underline">🔗 LinkedIn Profile: {c.linkedin_url}</a>
+                          </div>
+                        )}
                         <ActivityHistory username={c.github_username} />
                       </td>
                     </tr>

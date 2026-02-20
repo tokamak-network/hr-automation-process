@@ -114,5 +114,14 @@ async def init_db():
             (email, github, name, skills)
         )
 
+    # Migration: add linkedin_url to monitor_candidates if missing
+    try:
+        cursor = await db.execute("PRAGMA table_info(monitor_candidates)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "linkedin_url" not in columns:
+            await db.execute("ALTER TABLE monitor_candidates ADD COLUMN linkedin_url TEXT")
+    except Exception:
+        pass
+
     await db.commit()
     await db.close()

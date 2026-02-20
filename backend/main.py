@@ -520,6 +520,97 @@ async def linkedin_outreach(candidate_id: int, data: OutreachRequest):
     return {"id": candidate_id, "status": data.status}
 
 
+# ── Monitor LinkedIn Lookup ───────────────────────────────────────────────
+
+
+async def _find_linkedin_for_monitor_candidate(username: str, db) -> Optional[str]:
+    """Find LinkedIn URL for a single monitor candidate. Returns URL or None."""
+    import httpx
+    import re
+
+    token = os.getenv("GITHUB_TOKEN", "")
+    headers = {}
+    if token:
+        headers["Authorization"] = "token {}".format(token)
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                "https://api.github.com/users/{}".format(username),
+                headers=headers,
+            )
+            if resp.status_code != 200:
+                return None
+            user_data = resp.json()
+    except Exception:
+        return None
+
+    real_name = user_data.get("name", "") or ""
+    location = user_data.get("location", "") or ""
+    bio = user_data.get("bio", "") or ""
+    blog = user_data.get("blog", "") or ""
+    twitter = user_data.get("twitter_username", "") or ""
+
+    # Check profile fields for LinkedIn URL
+    for field in [blog, bio]:
+        match = re.search(r'linkedin\.com/in/([a-zA-Z0-9_-]+)', field)
+        if match:
+            url = "https://www.linkedin.com/in/{}".format(match.group(1))
+            await db.execute("UPDATE monitor_candidates SET linkedin_url = ? WHERE github_username = ?", (url, username))
+            await db.commit()
+            return url
+
+    if not real_name:
+        return None
+
+    # Use existing search function
+    from github_linkedin import find_linkedin_for_github_user
+    result = await find_linkedin_for_github_user(real_name, location, bio)
+    if result:
+        url = result["profile_url"]
+        await db.execute("UPDATE monitor_candidates SET linkedin_url = ? WHERE github_username = ?", (url, username))
+        await db.commit()
+        return url
+
+    return None
+
+
+@app.post("/api/monitor/find-linkedin")
+async def monitor_find_linkedin_all():
+    """Find LinkedIn profiles for all monitor candidates missing linkedin_url."""
+    db = await get_db()
+    rows = await db.execute(
+        "SELECT github_username FROM monitor_candidates WHERE linkedin_url IS NULL OR linkedin_url = ''"
+    )
+    candidates = [dict(r) for r in await rows.fetchall()]
+
+    found_list = []
+    for c in candidates:
+        username = c["github_username"]
+        url = await _find_linkedin_for_monitor_candidate(username, db)
+        if url:
+            found_list.append({"username": username, "linkedin_url": url})
+
+    await db.close()
+    return {"checked": len(candidates), "found": len(found_list), "candidates": found_list}
+
+
+@app.post("/api/monitor/find-linkedin/{username}")
+async def monitor_find_linkedin_single(username: str):
+    """Find LinkedIn profile for a single monitor candidate."""
+    db = await get_db()
+    row = await db.execute("SELECT id FROM monitor_candidates WHERE github_username = ?", (username,))
+    if not await row.fetchone():
+        await db.close()
+        raise HTTPException(404, "Candidate not found")
+
+    url = await _find_linkedin_for_monitor_candidate(username, db)
+    await db.close()
+    if url:
+        return {"username": username, "linkedin_url": url}
+    return {"username": username, "linkedin_url": None, "message": "LinkedIn profile not found"}
+
+
 @app.post("/api/linkedin/bridge")
 async def linkedin_bridge():
     """Find LinkedIn profiles for GitHub monitor candidates."""

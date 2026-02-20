@@ -214,7 +214,7 @@ export default function LinkedInPage() {
                 <th className="py-2 pr-3">Headline</th>
                 <th className="py-2 pr-3">Location</th>
                 <th className="py-2 pr-3 text-center">Score</th>
-                <th className="py-2 pr-3 text-center">OTW</th>
+                <th className="py-2 pr-3 text-center">Open To Work</th>
                 <th className="py-2 pr-3">Status</th>
                 <th className="py-2">Actions</th>
               </tr>
@@ -282,16 +282,18 @@ export default function LinkedInPage() {
                         <button
                           onClick={() => markOutreach(c.id, "outreach")}
                           className="text-[10px] bg-blue-800 hover:bg-blue-700 px-2 py-0.5 rounded"
+                          title="연락 대상으로 마킹 (실제 메시지 발송 X)"
                         >
-                          Mark Outreach
+                          📋 연락 대상
                         </button>
                       )}
                       {c.status === "outreach" && (
                         <button
                           onClick={() => markOutreach(c.id, "contacted")}
                           className="text-[10px] bg-yellow-800 hover:bg-yellow-700 px-2 py-0.5 rounded"
+                          title="연락 완료로 상태 변경"
                         >
-                          Contacted
+                          ✉️ 연락 완료
                         </button>
                       )}
                       {c.status !== "rejected" && (

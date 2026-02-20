@@ -19,6 +19,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "hiring.db")
 BRAVE_API_KEY = os.getenv("BRAVE_API_KEY", "")
 
 DEFAULT_SEARCH_QUERIES = [
+    # Core blockchain roles
     'site:linkedin.com/in "ethereum" "solidity" developer',
     'site:linkedin.com/in "layer 2" OR "L2" OR "rollup" engineer',
     'site:linkedin.com/in "ZK" OR "zero knowledge" engineer blockchain',
@@ -26,6 +27,18 @@ DEFAULT_SEARCH_QUERIES = [
     'site:linkedin.com/in "DeFi" developer "solidity" OR "rust"',
     'site:linkedin.com/in "blockchain protocol" engineer',
     'site:linkedin.com/in "ethereum" "rust" OR "typescript" developer open to work',
+    # Additional sourcing queries for broader coverage
+    'site:linkedin.com/in "solidity" "senior" engineer',
+    'site:linkedin.com/in "ethereum" "full stack" developer blockchain',
+    'site:linkedin.com/in "web3" developer "smart contract"',
+    'site:linkedin.com/in "optimistic rollup" OR "optimism" OR "arbitrum" engineer',
+    'site:linkedin.com/in "tokamak" OR "titan" blockchain',
+    'site:linkedin.com/in "EVM" developer "solidity"',
+    'site:linkedin.com/in "blockchain" "rust" engineer open to work',
+    'site:linkedin.com/in "solidity" developer "open to work"',
+    'site:linkedin.com/in "DeFi" protocol engineer',
+    'site:linkedin.com/in "ethereum" developer Korea OR Seoul',
+    'site:linkedin.com/in "blockchain" developer Korea OR 한국',
 ]
 
 

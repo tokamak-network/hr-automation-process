@@ -13,10 +13,13 @@ load_dotenv()
 
 from database import init_db, get_db
 from analyzer import analyze_repo, ai_analyze, analyze_github_profile, TEAM_MEMBERS, recommend_reviewers, calculate_weighted_score
+from linkedin_google import search_linkedin_candidates, get_linkedin_candidates, update_candidate_status as update_linkedin_status, init_linkedin_db
+from github_linkedin import bridge_github_candidates
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    init_linkedin_db()
     yield
 
 app = FastAPI(title="Tokamak Hiring Framework", lifespan=lifespan)
@@ -353,7 +356,7 @@ class OutreachRequest(BaseModel):
 @app.post("/api/linkedin/candidates/{candidate_id}/outreach")
 async def linkedin_outreach(candidate_id: int, data: OutreachRequest):
     """Mark candidate for outreach (status update)."""
-    success = update_candidate_status(candidate_id, data.status, data.notes)
+    success = update_linkedin_status(candidate_id, data.status, data.notes)
     if not success:
         raise HTTPException(404, "Candidate not found")
     return {"id": candidate_id, "status": data.status}

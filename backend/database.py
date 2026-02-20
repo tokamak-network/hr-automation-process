@@ -44,6 +44,17 @@ async def init_db():
         activity_level TEXT,
         last_scanned TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS monitor_activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        github_username TEXT NOT NULL,
+        activity_type TEXT NOT NULL,
+        repo_name TEXT NOT NULL,
+        activity_url TEXT NOT NULL,
+        activity_date TEXT,
+        details TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(github_username, activity_type, activity_url)
+    );
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,

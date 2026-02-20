@@ -10,11 +10,102 @@ const ACTIVITY_FILTERS = [
   { value: "3m", label: "3개월 이내" },
 ];
 
+const ACTIVITY_ICONS: Record<string, string> = {
+  star: "⭐",
+  fork: "🍴",
+  pr: "🔀",
+  issue: "🐛",
+  commit: "📝",
+  comment: "💬",
+};
+
+interface Activity {
+  activity_type: string;
+  repo_name: string;
+  activity_url: string;
+  activity_date: string;
+  details: string;
+}
+
+function ActivityBadges({ types }: { types: Record<string, number> }) {
+  if (!types || Object.keys(types).length === 0) return null;
+  return (
+    <span className="flex gap-1">
+      {Object.entries(types).map(([t, count]) => (
+        <span key={t} className="inline-flex items-center gap-0.5 text-xs bg-gray-100 rounded px-1.5 py-0.5" title={`${t}: ${count}`}>
+          {ACTIVITY_ICONS[t] || "📌"}{count}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function LastActivity({ activities }: { activities: Activity[] }) {
+  if (!activities || activities.length === 0) return <span className="text-gray-300">-</span>;
+  const a = activities[0];
+  const shortRepo = a.repo_name.split("/").pop() || a.repo_name;
+  const icon = ACTIVITY_ICONS[a.activity_type] || "📌";
+  const label = a.details
+    ? `${a.details.length > 40 ? a.details.slice(0, 40) + "…" : a.details}`
+    : a.activity_type;
+  return (
+    <a href={a.activity_url} target="_blank" className="text-[#2A72E5] hover:underline text-xs" title={a.details}>
+      {icon} {shortRepo}: {label}
+    </a>
+  );
+}
+
+function ActivityHistory({ username }: { username: string }) {
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API}/api/monitor/candidates/${username}/activities`)
+      .then(r => r.json())
+      .then(setActivities)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [username]);
+
+  if (loading) return <div className="p-2 text-xs text-gray-400">Loading...</div>;
+  if (activities.length === 0) return <div className="p-2 text-xs text-gray-400">No activities recorded</div>;
+
+  return (
+    <div className="p-3 bg-gray-50 border-t border-gray-100">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-gray-400 text-left">
+            <th className="pb-1 pr-2">Type</th>
+            <th className="pb-1 pr-2">Repo</th>
+            <th className="pb-1 pr-2">Details</th>
+            <th className="pb-1">Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {activities.map((a, i) => (
+            <tr key={i} className="border-t border-gray-100">
+              <td className="py-1 pr-2">{ACTIVITY_ICONS[a.activity_type] || "📌"} {a.activity_type}</td>
+              <td className="py-1 pr-2 text-gray-500">{a.repo_name.split("/").pop()}</td>
+              <td className="py-1 pr-2">
+                <a href={a.activity_url} target="_blank" className="text-[#2A72E5] hover:underline">
+                  {a.details ? (a.details.length > 50 ? a.details.slice(0, 50) + "…" : a.details) : "View"}
+                </a>
+              </td>
+              <td className="py-1 text-gray-400">{a.activity_date ? new Date(a.activity_date).toLocaleDateString("ko-KR") : "-"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function MonitorPage() {
   const [candidates, setCandidates] = useState<any[]>([]);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [activityFilter, setActivityFilter] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const load = (filter?: string) => {
     const f = filter ?? activityFilter;
@@ -76,7 +167,6 @@ export default function MonitorPage() {
         </div>
       )}
 
-      {/* Activity Filter */}
       <div className="flex items-center gap-3 mb-4">
         <span className="text-sm text-gray-500">마지막 활동:</span>
         {ACTIVITY_FILTERS.map((f) => (
@@ -104,30 +194,47 @@ export default function MonitorPage() {
           <table className="w-full text-sm">
             <thead><tr className="text-left text-gray-500 border-b border-gray-200 bg-gray-50">
               <th className="py-3 px-4">Username</th>
+              <th className="py-3 px-4">Activities</th>
+              <th className="py-3 px-4">Last Activity</th>
               <th className="py-3 px-4">Repos</th>
-              <th className="py-3 px-4">Followers</th>
               <th className="py-3 px-4">Languages</th>
               <th className="py-3 px-4">Avg Score</th>
               <th className="py-3 px-4">Last Active</th>
             </tr></thead>
             <tbody>
               {candidates.map(c => (
-                <tr key={c.github_username} className="hover:bg-gray-50 transition border-b border-gray-200">
-                  <td className="py-3 px-4"><a href={c.profile_url} className="text-[#2A72E5] hover:underline" target="_blank">{c.github_username}</a></td>
-                  <td className="py-3 px-4">{c.public_repos}</td>
-                  <td className="py-3 px-4">{c.followers}</td>
-                  <td className="py-3 px-4 text-gray-500">{Object.keys(c.languages || {}).slice(0, 3).join(", ")}</td>
-                  <td className="py-3 px-4">
-                    <span className={`font-mono text-xs px-2 py-0.5 rounded ${
-                      c.scores && avgScore(c.scores) !== "-" && parseFloat(avgScore(c.scores)) >= 6
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-100 text-gray-500"
-                    }`}>
-                      {c.scores ? avgScore(c.scores) : "-"}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-xs text-gray-400">{c.last_scanned ? new Date(c.last_scanned).toLocaleDateString('ko-KR') : "-"}</td>
-                </tr>
+                <>
+                  <tr
+                    key={c.github_username}
+                    className="hover:bg-gray-50 transition border-b border-gray-200 cursor-pointer"
+                    onClick={() => setExpanded(expanded === c.github_username ? null : c.github_username)}
+                  >
+                    <td className="py-3 px-4">
+                      <a href={c.profile_url} className="text-[#2A72E5] hover:underline" target="_blank" onClick={e => e.stopPropagation()}>{c.github_username}</a>
+                    </td>
+                    <td className="py-3 px-4"><ActivityBadges types={c.activity_types} /></td>
+                    <td className="py-3 px-4"><LastActivity activities={c.recent_activities} /></td>
+                    <td className="py-3 px-4">{c.public_repos}</td>
+                    <td className="py-3 px-4 text-gray-500">{Object.keys(c.languages || {}).slice(0, 3).join(", ")}</td>
+                    <td className="py-3 px-4">
+                      <span className={`font-mono text-xs px-2 py-0.5 rounded ${
+                        c.scores && avgScore(c.scores) !== "-" && parseFloat(avgScore(c.scores)) >= 6
+                          ? "bg-green-100 text-green-700"
+                          : "bg-gray-100 text-gray-500"
+                      }`}>
+                        {c.scores ? avgScore(c.scores) : "-"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-xs text-gray-400">{c.last_scanned ? new Date(c.last_scanned).toLocaleDateString('ko-KR') : "-"}</td>
+                  </tr>
+                  {expanded === c.github_username && (
+                    <tr key={c.github_username + "-detail"}>
+                      <td colSpan={7}>
+                        <ActivityHistory username={c.github_username} />
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>

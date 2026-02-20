@@ -223,47 +223,80 @@ async def scan_github():
     except Exception as e:
         raise HTTPException(400, "Failed to access org: {}".format(e))
 
-    # Track external users with their last activity date on tokamak-network
-    external_users = {}  # username -> last_activity_date (ISO string)
+    # Collect individual activities: list of (username, type, repo_name, url, date, details)
+    activities = []  # type: list
+    external_users = {}  # username -> last_activity_date
     repos_scanned = 0
 
-    def _update_activity(login, activity_date):
-        """Track the most recent activity date per user."""
+    def _add_activity(login, activity_type, repo_name, url, activity_date, details=""):
         if login in TEAM_MEMBERS:
             return
         dt_str = activity_date.isoformat() if activity_date else None
+        activities.append((login, activity_type, repo_name, url, dt_str, details))
         if dt_str and (login not in external_users or dt_str > external_users[login]):
             external_users[login] = dt_str
 
     for repo in org.get_repos(sort="updated")[:30]:
         repos_scanned += 1
-        # Stargazers (no date available from API, use repo updated_at as proxy)
+        repo_full = repo.full_name
+        # Stargazers with dates
         try:
-            for stargazer in repo.get_stargazers()[:50]:
-                _update_activity(stargazer.login, repo.updated_at)
-        except:
+            for sg in repo.get_stargazers_with_dates()[:50]:
+                user = sg.user
+                starred_at = sg.starred_at
+                _add_activity(
+                    user.login, "star", repo_full,
+                    "https://github.com/" + repo_full,
+                    starred_at, "Starred " + repo_full
+                )
+        except Exception:
             pass
         # Forks
         try:
             for fork in repo.get_forks()[:20]:
-                _update_activity(fork.owner.login, fork.created_at)
-        except:
+                _add_activity(
+                    fork.owner.login, "fork", repo_full,
+                    fork.html_url,
+                    fork.created_at, "Forked " + repo_full
+                )
+        except Exception:
             pass
-        # PRs (use created_at or updated_at)
+        # PRs
         try:
             for pr in repo.get_pulls(state="all", sort="updated", direction="desc")[:20]:
-                _update_activity(pr.user.login, pr.updated_at or pr.created_at)
-        except:
+                _add_activity(
+                    pr.user.login, "pr", repo_full,
+                    pr.html_url,
+                    pr.created_at, pr.title
+                )
+        except Exception:
             pass
         # Issues
         try:
             for issue in repo.get_issues(state="all", sort="updated", direction="desc")[:20]:
-                if not issue.pull_request:  # skip PRs listed as issues
-                    _update_activity(issue.user.login, issue.updated_at or issue.created_at)
-        except:
+                if not issue.pull_request:
+                    _add_activity(
+                        issue.user.login, "issue", repo_full,
+                        issue.html_url,
+                        issue.created_at, issue.title
+                    )
+        except Exception:
             pass
 
     db = await get_db()
+
+    # Save activities (dedup via UNIQUE constraint)
+    for login, atype, repo_name, url, dt_str, details in activities:
+        try:
+            await db.execute("""
+                INSERT OR IGNORE INTO monitor_activities
+                (github_username, activity_type, repo_name, activity_url, activity_date, details)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (login, atype, repo_name, url, dt_str, details))
+        except Exception:
+            pass
+
+    # Analyze profiles
     analyzed = 0
     for username in list(external_users.keys())[:50]:
         profile = await analyze_github_profile(g, username)
@@ -283,6 +316,9 @@ async def scan_github():
             "ecosystem_relevance": eco_rel,
         }
 
+        # last_scanned = most recent activity date for this user
+        last_active = external_users.get(username, datetime.utcnow().isoformat())
+
         await db.execute("""
             INSERT INTO monitor_candidates (github_username, profile_url, bio, public_repos, followers, languages, contributions, scores, last_scanned)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -293,7 +329,7 @@ async def scan_github():
             username, profile.get("profile_url", ""), profile.get("bio", ""),
             profile.get("public_repos", 0), profile.get("followers", 0),
             json.dumps(langs), json.dumps(profile.get("recent_repos", [])),
-            json.dumps(scores), external_users.get(username, datetime.utcnow().isoformat())
+            json.dumps(scores), last_active
         ))
         analyzed += 1
 
@@ -307,11 +343,11 @@ async def list_monitor_candidates(activity_within: str = ""):
     """List monitor candidates. activity_within: 1w, 1m, 3m to filter by last_scanned."""
     db = await get_db()
     query = "SELECT * FROM monitor_candidates"
-    params = []
+    params = []  # type: list
     if activity_within in ("1w", "1m", "3m"):
         days_map = {"1w": 7, "1m": 30, "3m": 90}
         query += " WHERE last_scanned >= datetime('now', ?)"
-        params.append(f"-{days_map[activity_within]} days")
+        params.append("-{} days".format(days_map[activity_within]))
     query += " ORDER BY last_scanned DESC"
     rows = await db.execute(query, params)
     candidates = []
@@ -320,9 +356,37 @@ async def list_monitor_candidates(activity_within: str = ""):
         for f in ["languages", "contributions", "scores"]:
             if c.get(f):
                 c[f] = json.loads(c[f])
+
+        # Fetch recent activities
+        act_rows = await db.execute(
+            "SELECT activity_type, repo_name, activity_url, activity_date, details FROM monitor_activities WHERE github_username = ? ORDER BY activity_date DESC LIMIT 5",
+            (c["github_username"],)
+        )
+        c["recent_activities"] = [dict(a) for a in await act_rows.fetchall()]
+
+        # Activity type summary
+        summary_rows = await db.execute(
+            "SELECT activity_type, COUNT(*) as cnt FROM monitor_activities WHERE github_username = ? GROUP BY activity_type",
+            (c["github_username"],)
+        )
+        c["activity_types"] = {row["activity_type"]: row["cnt"] for row in await summary_rows.fetchall()}
+
         candidates.append(c)
     await db.close()
     return candidates
+
+
+@app.get("/api/monitor/candidates/{github_username}/activities")
+async def get_monitor_activities(github_username: str):
+    """Get all activities for a monitor candidate."""
+    db = await get_db()
+    rows = await db.execute(
+        "SELECT activity_type, repo_name, activity_url, activity_date, details FROM monitor_activities WHERE github_username = ? ORDER BY activity_date DESC",
+        (github_username,)
+    )
+    activities = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return activities
 
 
 @app.get("/api/monitor/candidates/{github_username}")

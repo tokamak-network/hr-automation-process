@@ -35,29 +35,31 @@ export default function CandidatesPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Candidates</h1>
-      {loading ? <p className="text-gray-500">Loading...</p> : candidates.length === 0 ? (
-        <p className="text-gray-500">No candidates yet. <a href="/submit" className="text-blue-400 underline">Submit one</a>.</p>
+      {loading ? <p style={{ color: "var(--color-text-muted)" }}>Loading...</p> : candidates.length === 0 ? (
+        <p style={{ color: "var(--color-text-muted)" }}>No candidates yet. <a href="/submit" style={{ color: "var(--color-primary)" }} className="underline">Submit one</a>.</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead><tr className="text-left text-gray-500 border-b border-gray-800">
-            <th className="py-2">Name</th><th>Email</th><th>Status</th><th>Avg Score</th><th>Recommendation</th><th>Actions</th>
-          </tr></thead>
-          <tbody>
-            {candidates.map(c => (
-              <tr key={c.id} className="border-b border-gray-800/50 hover:bg-gray-900/50">
-                <td className="py-2"><a href={`/candidates/${c.id}`} className="text-blue-400 hover:underline">{c.name}</a></td>
-                <td className="text-gray-400">{c.email}</td>
-                <td><span className={`px-2 py-0.5 rounded text-xs ${c.status === 'analyzed' ? 'bg-green-900/50 text-green-400' : 'bg-gray-800 text-gray-400'}`}>{c.status}</span></td>
-                <td>{avgScore(c.scores)}</td>
-                <td className={recColor[c.recommendation || ""] || ""}>{c.recommendation || "-"}</td>
-                <td>
-                  {c.status === "submitted" && <button onClick={() => triggerAnalysis(c.id)} className="text-xs bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded">Analyze</button>}
-                  {c.status === "analyzed" && <a href={`/candidates/${c.id}`} className="text-xs text-blue-400 hover:underline">View</a>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+          <table className="w-full text-sm">
+            <thead><tr className="text-left" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)", background: "var(--color-card)" }}>
+              <th className="py-3 px-4">Name</th><th className="py-3 px-4">Email</th><th className="py-3 px-4">Status</th><th className="py-3 px-4">Avg Score</th><th className="py-3 px-4">Recommendation</th><th className="py-3 px-4">Actions</th>
+            </tr></thead>
+            <tbody>
+              {candidates.map(c => (
+                <tr key={c.id} className="hover:brightness-125 transition" style={{ borderBottom: "1px solid var(--color-border)", background: "rgba(26, 27, 46, 0.5)" }}>
+                  <td className="py-3 px-4"><a href={`/candidates/${c.id}`} style={{ color: "var(--color-primary)" }} className="hover:underline">{c.name}</a></td>
+                  <td className="py-3 px-4" style={{ color: "var(--color-text-secondary)" }}>{c.email}</td>
+                  <td className="py-3 px-4"><span className={`px-2 py-0.5 rounded text-xs ${c.status === 'analyzed' ? 'bg-green-900/50 text-green-400' : 'text-gray-400'}`} style={c.status !== 'analyzed' ? { background: "var(--color-card)", border: "1px solid var(--color-border)" } : {}}>{c.status}</span></td>
+                  <td className="py-3 px-4">{avgScore(c.scores)}</td>
+                  <td className={`py-3 px-4 ${recColor[c.recommendation || ""] || ""}`}>{c.recommendation || "-"}</td>
+                  <td className="py-3 px-4">
+                    {c.status === "submitted" && <button onClick={() => triggerAnalysis(c.id)} className="text-xs px-3 py-1 rounded font-medium text-white hover:brightness-110" style={{ background: "var(--color-primary)" }}>Analyze</button>}
+                    {c.status === "analyzed" && <a href={`/candidates/${c.id}`} style={{ color: "var(--color-primary)" }} className="text-xs hover:underline">View</a>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

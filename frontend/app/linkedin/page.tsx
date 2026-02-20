@@ -117,28 +117,31 @@ export default function LinkedInPage() {
       <h1 className="text-2xl font-bold mb-6">🔗 LinkedIn Sourcing</h1>
 
       {/* Search Section */}
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Search for Candidates</h2>
+      <div className="rounded-lg p-6 mb-6" style={{ background: "var(--color-card)", border: "1px solid var(--color-border)" }}>
+        <h2 className="text-lg font-semibold mb-3 text-white">Search for Candidates</h2>
         <div className="flex gap-3 mb-3">
           <input
             type="text"
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
             placeholder="Enter keywords (e.g., 'solidity developer')"
-            className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm"
+            className="flex-1 rounded px-3 py-2 text-sm outline-none placeholder-gray-500"
+            style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
             onKeyDown={(e) => e.key === "Enter" && runSearch(searchKeyword)}
           />
           <button
             onClick={() => runSearch(searchKeyword)}
             disabled={searching}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 rounded text-sm font-medium"
+            className="disabled:opacity-50 px-4 py-2 rounded text-sm font-medium text-white hover:brightness-110"
+            style={{ background: "var(--color-primary)" }}
           >
             {searching ? "Searching..." : "Search"}
           </button>
           <button
             onClick={() => runSearch()}
             disabled={searching}
-            className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 px-4 py-2 rounded text-sm font-medium"
+            className="disabled:opacity-50 px-4 py-2 rounded text-sm font-medium hover:brightness-110"
+            style={{ background: "var(--color-border)", color: "var(--color-text-secondary)" }}
           >
             Run Default Queries
           </button>
@@ -150,7 +153,8 @@ export default function LinkedInPage() {
             <button
               key={kw}
               onClick={() => setSearchKeyword(kw)}
-              className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-full px-3 py-1 text-gray-400 hover:text-white"
+              className="text-xs rounded-full px-3 py-1 hover:brightness-125 transition"
+              style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}
             >
               {kw}
             </button>
@@ -161,14 +165,15 @@ export default function LinkedInPage() {
         <button
           onClick={runBridge}
           disabled={bridging}
-          className="text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded px-3 py-1.5"
+          className="text-xs rounded px-3 py-1.5 hover:brightness-125 transition"
+          style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}
         >
           {bridging ? "Bridging..." : "🔄 Find LinkedIn for GitHub candidates"}
         </button>
 
         {/* Search result */}
         {searchResult && (
-          <div className="mt-3 text-sm p-3 bg-gray-800 rounded">
+          <div className="mt-3 text-sm p-3 rounded" style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)" }}>
             {searchResult.error ? (
               <span className="text-red-400">❌ {searchResult.error}</span>
             ) : (
@@ -183,51 +188,53 @@ export default function LinkedInPage() {
 
       {/* Filter */}
       <div className="flex items-center gap-3 mb-4">
-        <span className="text-sm text-gray-400">Filter:</span>
+        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Filter:</span>
         {STATUS_OPTIONS.map((opt) => (
           <button
             key={opt.value}
             onClick={() => setStatusFilter(opt.value)}
-            className={`text-xs px-3 py-1 rounded-full border ${
+            className="text-xs px-3 py-1 rounded-full transition"
+            style={
               statusFilter === opt.value
-                ? "bg-blue-600 border-blue-500 text-white"
-                : "bg-gray-800 border-gray-700 text-gray-400 hover:text-white"
-            }`}
+                ? { background: "var(--color-primary)", borderColor: "var(--color-primary)", color: "white", border: "1px solid var(--color-primary)" }
+                : { background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }
+            }
           >
             {opt.label}
           </button>
         ))}
-        <span className="text-xs text-gray-500 ml-auto">{candidates.length} candidates</span>
+        <span className="text-xs ml-auto" style={{ color: "var(--color-text-muted)" }}>{candidates.length} candidates</span>
       </div>
 
       {/* Candidates Table */}
       {loading ? (
-        <p className="text-gray-500">Loading...</p>
+        <p style={{ color: "var(--color-text-muted)" }}>Loading...</p>
       ) : candidates.length === 0 ? (
-        <p className="text-gray-500">No candidates found. Run a search to discover candidates.</p>
+        <p style={{ color: "var(--color-text-muted)" }}>No candidates found. Run a search to discover candidates.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto rounded-lg" style={{ border: "1px solid var(--color-border)" }}>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-gray-800 text-gray-400 text-left">
-                <th className="py-2 pr-3">Name</th>
-                <th className="py-2 pr-3">Headline</th>
-                <th className="py-2 pr-3">Location</th>
-                <th className="py-2 pr-3 text-center">Score</th>
-                <th className="py-2 pr-3 text-center">Open To Work</th>
-                <th className="py-2 pr-3">Status</th>
-                <th className="py-2">Actions</th>
+              <tr className="text-left" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)", background: "var(--color-card)" }}>
+                <th className="py-3 px-4">Name</th>
+                <th className="py-3 px-4">Headline</th>
+                <th className="py-3 px-4">Location</th>
+                <th className="py-3 px-4 text-center">Score</th>
+                <th className="py-3 px-4 text-center">Open To Work</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {candidates.map((c) => (
-                <tr key={c.id} className="border-b border-gray-800/50 hover:bg-gray-900/50">
-                  <td className="py-2.5 pr-3">
+                <tr key={c.id} className="hover:brightness-125 transition" style={{ borderBottom: "1px solid var(--color-border)", background: "rgba(26, 27, 46, 0.5)" }}>
+                  <td className="py-2.5 px-4">
                     <a
                       href={c.profile_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-400 hover:text-blue-300 font-medium"
+                      className="font-medium hover:underline"
+                      style={{ color: "var(--color-primary)" }}
                     >
                       {c.full_name}
                     </a>
@@ -237,29 +244,30 @@ export default function LinkedInPage() {
                       </span>
                     )}
                   </td>
-                  <td className="py-2.5 pr-3 text-gray-400 max-w-xs truncate">{c.headline}</td>
-                  <td className="py-2.5 pr-3 text-gray-500 text-xs">{c.location}</td>
-                  <td className="py-2.5 pr-3 text-center">
+                  <td className="py-2.5 px-4 max-w-xs truncate" style={{ color: "var(--color-text-secondary)" }}>{c.headline}</td>
+                  <td className="py-2.5 px-4 text-xs" style={{ color: "var(--color-text-muted)" }}>{c.location}</td>
+                  <td className="py-2.5 px-4 text-center">
                     <span
                       className={`font-mono text-xs px-2 py-0.5 rounded ${
                         c.score >= 8
                           ? "bg-green-900/50 text-green-300"
                           : c.score >= 6
                           ? "bg-yellow-900/50 text-yellow-300"
-                          : "bg-gray-800 text-gray-400"
+                          : "text-gray-400"
                       }`}
+                      style={c.score < 6 ? { background: "var(--color-card)" } : {}}
                     >
                       {c.score?.toFixed(1)}
                     </span>
                   </td>
-                  <td className="py-2.5 pr-3 text-center">
+                  <td className="py-2.5 px-4 text-center">
                     {c.open_to_work ? (
                       <span className="text-green-400 text-xs">🟢</span>
                     ) : (
-                      <span className="text-gray-600 text-xs">—</span>
+                      <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>—</span>
                     )}
                   </td>
-                  <td className="py-2.5 pr-3">
+                  <td className="py-2.5 px-4">
                     <span
                       className={`text-xs px-2 py-0.5 rounded ${
                         c.status === "outreach"
@@ -270,36 +278,36 @@ export default function LinkedInPage() {
                           ? "bg-green-900/50 text-green-300"
                           : c.status === "rejected"
                           ? "bg-red-900/50 text-red-300"
-                          : "bg-gray-800 text-gray-400"
+                          : "text-gray-400"
                       }`}
+                      style={c.status === "discovered" ? { background: "var(--color-card)" } : {}}
                     >
                       {c.status}
                     </span>
                   </td>
-                  <td className="py-2.5">
+                  <td className="py-2.5 px-4">
                     <div className="flex gap-1">
                       {c.status === "discovered" && (
                         <button
                           onClick={() => markOutreach(c.id, "outreach")}
-                          className="text-[10px] bg-blue-800 hover:bg-blue-700 px-2 py-0.5 rounded"
-                          title="연락 대상으로 마킹 (실제 메시지 발송 X)"
+                          className="text-[10px] bg-blue-800 hover:bg-blue-700 px-2 py-0.5 rounded text-white"
                         >
-                          📋 연락 대상
+                          Mark Outreach
                         </button>
                       )}
                       {c.status === "outreach" && (
                         <button
                           onClick={() => markOutreach(c.id, "contacted")}
-                          className="text-[10px] bg-yellow-800 hover:bg-yellow-700 px-2 py-0.5 rounded"
-                          title="연락 완료로 상태 변경"
+                          className="text-[10px] bg-yellow-800 hover:bg-yellow-700 px-2 py-0.5 rounded text-white"
                         >
-                          ✉️ 연락 완료
+                          Contacted
                         </button>
                       )}
                       {c.status !== "rejected" && (
                         <button
                           onClick={() => markOutreach(c.id, "rejected")}
-                          className="text-[10px] bg-gray-800 hover:bg-red-900 px-2 py-0.5 rounded text-gray-500 hover:text-red-400"
+                          className="text-[10px] px-2 py-0.5 rounded hover:text-red-400 transition"
+                          style={{ background: "var(--color-card)", color: "var(--color-text-muted)" }}
                         >
                           ✕
                         </button>

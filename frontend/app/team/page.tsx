@@ -37,7 +37,10 @@ export default function TeamPage() {
     setScanning(true);
     setScanResult(null);
     try {
-      const res = await fetch(`${API}/api/team/profile-scan`, { method: "POST" });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min timeout
+      const res = await fetch(`${API}/api/team/profile-scan`, { method: "POST", signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await res.json();
       if (!res.ok) {
         setScanResult({ error: data.detail || "Scan failed" });
@@ -70,7 +73,7 @@ export default function TeamPage() {
           disabled={scanning}
           className="px-4 py-2 disabled:opacity-50 rounded text-sm font-medium text-white bg-[#1C1C1C] hover:bg-gray-800 transition"
         >
-          {scanning ? "Scanning..." : "🔄 Scan Profiles"}
+          {scanning ? "⏳ Scanning GitHub (약 2분 소요)..." : "🔄 Scan Profiles"}
         </button>
       </div>
 

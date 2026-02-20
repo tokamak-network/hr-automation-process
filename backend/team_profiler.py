@@ -147,9 +147,11 @@ async def scan_org_profiles(db) -> Dict[str, Any]:
     repos_scanned = 0
 
     try:
-        all_repos = list(org.get_repos(sort="updated", type="all"))
+        all_repos = list(org.get_repos(sort="updated", type="all"))[:50]  # Limit to 50 most recent repos for speed
     except Exception as e:
         return {"error": "Failed to list repos: {}".format(str(e))}
+    
+    logger.info("Scanning {} repos for team profiles".format(len(all_repos)))
 
     for repo in all_repos:
         repos_scanned += 1
@@ -195,22 +197,8 @@ async def scan_org_profiles(db) -> Dict[str, Any]:
         except Exception as e:
             logger.warning("Failed to get contributors for {}: {}".format(repo_name, e))
 
-        # Scan PR reviews (limited)
-        try:
-            for pr in repo.get_pulls(state="all", sort="updated", direction="desc")[:30]:
-                if pr.updated_at and pr.updated_at < six_months_ago:
-                    break
-                try:
-                    for review in pr.get_reviews():
-                        login = review.user.login if review.user else None
-                        if login and login in known_members:
-                            member_data[login]["review_count"] += 1
-                            for domain in repo_domains:
-                                member_data[login]["domains"][domain] += 2  # reviews weigh more
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        # Skip PR review scanning for speed (too many API calls)
+        # Reviews can be added in a separate background job later
 
     # Now build profiles and store in DB
     profiles_created = 0

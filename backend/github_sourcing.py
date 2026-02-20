@@ -111,8 +111,17 @@ def save_github_candidate(user_data: dict, score: float, search_query: str) -> b
     headline = user_data.get("bio") or f"GitHub: {user_data.get('public_repos', 0)} repos, {user_data.get('followers', 0)} followers"
     
     try:
+        # Skip if same candidate was found within last 30 days
+        existing = conn.execute(
+            "SELECT created_at FROM linkedin_candidates WHERE linkedin_username = ? AND created_at >= datetime('now', '-30 days')",
+            (db_username,)
+        ).fetchone()
+        if existing:
+            conn.close()
+            return False
+        
         conn.execute("""
-            INSERT OR IGNORE INTO linkedin_candidates
+            INSERT OR REPLACE INTO linkedin_candidates
             (linkedin_username, full_name, headline, location, profile_url,
              open_to_work, search_keyword, raw_data, score, created_at, source, github_url)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

@@ -20,14 +20,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen bg-white text-gray-900">
         <UserProvider>
-          <nav className="border-b border-gray-800 sticky top-0 z-50" style={{ background: "#1C1C1C" }}>
-            <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-6">
-              <a href="/" className="flex items-center gap-2 shrink-0">
-                <img src="/tokamak-logo-white.png" alt="Tokamak Network" className="h-8 w-auto" />
-                <span className="text-base font-semibold text-white">Hiring</span>
+          <nav className="border-b border-gray-200 sticky top-0 z-50 bg-white">
+            <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-8">
+              <a href="/" className="flex items-center gap-2.5 shrink-0">
+                <img src="/tokamak-symbol.png" alt="Tokamak" className="h-10 w-auto -mr-1" />
+                <span className="text-xl font-bold tracking-tight text-[#1C1C1C]">Tokamak Hiring</span>
               </a>
               {navLinks.map(l => (
-                <a key={l.href} href={l.href} className="text-sm text-gray-400 hover:text-white transition">{l.label}</a>
+                <a key={l.href} href={l.href} className="text-sm text-gray-500 hover:text-[#1C1C1C] transition font-medium">{l.label}</a>
               ))}
               <div className="ml-auto">
                 <UserSelector />

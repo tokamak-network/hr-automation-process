@@ -16,6 +16,7 @@ from analyzer import analyze_repo, ai_analyze, analyze_github_profile, TEAM_MEMB
 from team_profiler import scan_org_profiles
 from linkedin_google import search_linkedin_candidates, get_linkedin_candidates, update_candidate_status as update_linkedin_status, init_linkedin_db
 from github_linkedin import bridge_github_candidates
+from github_sourcing import search_github_developers
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -379,10 +380,28 @@ class LinkedInSearchRequest(BaseModel):
 
 @app.post("/api/linkedin/search")
 async def linkedin_search(data: LinkedInSearchRequest):
-    """Trigger LinkedIn sourcing via web search."""
+    """Trigger candidate sourcing. Tries web search first, falls back to GitHub API."""
     result = await search_linkedin_candidates(
         keywords=data.keywords or None,
         queries=data.queries or None,
+    )
+    # If web search found nothing, fall back to GitHub API search
+    if result.get("total_found", 0) == 0:
+        github_result = await search_github_developers(
+            keywords=data.keywords or None,
+            max_per_query=15,
+        )
+        return github_result
+    return result
+
+
+@app.post("/api/github/search")
+async def github_search(data: LinkedInSearchRequest):
+    """Search GitHub directly for developer candidates."""
+    result = await search_github_developers(
+        keywords=data.keywords or None,
+        queries=data.queries if data.queries else None,
+        max_per_query=20,
     )
     return result
 

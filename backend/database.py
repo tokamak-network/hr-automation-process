@@ -59,6 +59,19 @@ async def init_db():
         skills TEXT NOT NULL,
         UNIQUE(user_email)
     );
+    CREATE TABLE IF NOT EXISTS team_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        github_username TEXT UNIQUE NOT NULL,
+        display_name TEXT,
+        avatar_url TEXT,
+        expertise_areas TEXT,
+        top_repos TEXT,
+        languages TEXT,
+        review_count INTEGER DEFAULT 0,
+        last_active TEXT,
+        last_profiled TEXT,
+        is_active INTEGER DEFAULT 1
+    );
     """)
 
     # Pre-populate users and team_skills

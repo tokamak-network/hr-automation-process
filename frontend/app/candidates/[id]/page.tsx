@@ -8,8 +8,11 @@ interface Reviewer {
   name: string;
   email: string;
   github: string;
+  avatar_url?: string;
   matching_skills: string[];
   match_score: number;
+  expertise?: Record<string, number>;
+  why?: string;
 }
 
 export default function CandidateDetail() {
@@ -106,14 +109,30 @@ export default function CandidateDetail() {
           <h2 className="font-semibold mb-3">👥 Recommended Reviewers</h2>
           <div className="grid grid-cols-3 gap-3">
             {reviewers.map(r => (
-              <div key={r.email} className="bg-gray-800 rounded-lg p-4">
-                <div className="font-medium text-blue-400">{r.name}</div>
-                <a href={`https://github.com/${r.github}`} className="text-xs text-gray-500 hover:underline" target="_blank">@{r.github}</a>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {r.matching_skills.map(s => (
-                    <span key={s} className="bg-blue-900/40 text-blue-300 text-xs px-2 py-0.5 rounded">{s}</span>
-                  ))}
+              <div key={r.github} className="bg-gray-800 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  {r.avatar_url && (
+                    <img src={r.avatar_url} alt={r.github} className="w-8 h-8 rounded-full" />
+                  )}
+                  <div>
+                    <div className="font-medium text-blue-400">{r.name}</div>
+                    <a href={`https://github.com/${r.github}`} className="text-xs text-gray-500 hover:underline" target="_blank">@{r.github}</a>
+                  </div>
                 </div>
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {r.matching_skills.map(s => {
+                    const score = r.expertise?.[s];
+                    const color = score && score >= 0.7 ? "bg-green-900/40 text-green-300" : "bg-blue-900/40 text-blue-300";
+                    return (
+                      <span key={s} className={`${color} text-xs px-2 py-0.5 rounded`}>
+                        {s}{score ? ` ${Math.round(score * 100)}%` : ""}
+                      </span>
+                    );
+                  })}
+                </div>
+                {r.why && (
+                  <p className="text-xs text-gray-500 italic">{r.why}</p>
+                )}
               </div>
             ))}
           </div>

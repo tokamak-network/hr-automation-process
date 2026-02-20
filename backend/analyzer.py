@@ -45,8 +45,20 @@ def calculate_weighted_score(scores: Dict[str, int]) -> float:
     return round(weighted_sum / total_weight, 2)
 
 
-async def recommend_reviewers(candidate_scores: Dict[str, Any], repo_analysis: Dict[str, Any], db) -> List[Dict[str, Any]]:
-    """Recommend team reviewers based on tech stack overlap."""
+async def recommend_reviewers(candidate_scores: Dict[str, Any], repo_analysis: Dict[str, Any], db, exclude_email: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Recommend team reviewers based on expertise profile matching.
+    
+    Uses team_profiles (auto-generated from GitHub activity) with weighted matching.
+    Falls back to team_skills if no profiles exist.
+    """
+    # Try team_profiles first
+    rows = await db.execute("SELECT * FROM team_profiles WHERE is_active = 1")
+    profiles = await rows.fetchall()
+
+    if profiles:
+        return _match_from_profiles(profiles, repo_analysis, exclude_email)
+
+    # Fallback to legacy team_skills
     rows = await db.execute("SELECT * FROM team_skills")
     team = await rows.fetchall()
 
@@ -55,7 +67,6 @@ async def recommend_reviewers(candidate_scores: Dict[str, Any], repo_analysis: D
         for lang in repo_analysis.get("languages", {}).keys():
             candidate_langs.add(lang.lower())
 
-    # Map language names to skill keywords
     lang_to_skills = {
         "solidity": ["solidity", "smart-contracts", "ethereum", "protocol"],
         "typescript": ["typescript", "fullstack", "frontend"],
@@ -74,6 +85,8 @@ async def recommend_reviewers(candidate_scores: Dict[str, Any], repo_analysis: D
 
     recommendations = []
     for member in team:
+        if exclude_email and member["user_email"] == exclude_email:
+            continue
         member_skills = set(member["skills"].split(","))
         overlap = candidate_skill_keywords & member_skills
         if overlap:
@@ -83,6 +96,61 @@ async def recommend_reviewers(candidate_scores: Dict[str, Any], repo_analysis: D
                 "github": member["github_username"],
                 "matching_skills": list(overlap),
                 "match_score": len(overlap),
+            })
+
+    recommendations.sort(key=lambda x: x["match_score"], reverse=True)
+    return recommendations[:3]
+
+
+def _match_from_profiles(profiles, repo_analysis: Dict[str, Any], exclude_email: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Match candidate repo against team_profiles expertise_areas."""
+    # Build candidate expertise keywords from languages
+    candidate_keywords = set()  # type: Set[str]
+    if repo_analysis:
+        for lang in repo_analysis.get("languages", {}).keys():
+            lang_lower = lang.lower()
+            candidate_keywords.add(lang_lower)
+            # Map languages to broader areas
+            mapping = {
+                "solidity": ["solidity", "smart-contracts", "ethereum"],
+                "typescript": ["typescript", "fullstack", "frontend"],
+                "javascript": ["javascript", "fullstack", "frontend"],
+                "python": ["python"],
+                "rust": ["rust", "protocol"],
+                "go": ["go", "protocol"],
+                "css": ["frontend", "ui"],
+                "html": ["frontend"],
+            }
+            for kw in mapping.get(lang_lower, []):
+                candidate_keywords.add(kw)
+
+    recommendations = []
+    for profile in profiles:
+        expertise = json.loads(profile["expertise_areas"]) if profile["expertise_areas"] else {}
+        if not expertise:
+            continue
+
+        # Weighted match score
+        match_score = 0.0
+        matching_skills = []
+        for keyword in candidate_keywords:
+            if keyword in expertise:
+                score = expertise[keyword]
+                match_score += score
+                matching_skills.append(keyword)
+
+        if match_score > 0:
+            recommendations.append({
+                "name": profile["display_name"] or profile["github_username"],
+                "email": "",
+                "github": profile["github_username"],
+                "avatar_url": profile["avatar_url"] or "",
+                "matching_skills": sorted(matching_skills, key=lambda s: expertise.get(s, 0), reverse=True)[:6],
+                "match_score": round(match_score, 2),
+                "expertise": expertise,
+                "why": "Strong in: {}".format(", ".join(
+                    sorted(matching_skills, key=lambda s: expertise.get(s, 0), reverse=True)[:3]
+                )),
             })
 
     recommendations.sort(key=lambda x: x["match_score"], reverse=True)

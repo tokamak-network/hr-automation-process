@@ -13,6 +13,7 @@ const navLinks = [
   { href: "/submit", label: "Submit" },
   { href: "/monitor", label: "Monitor" },
   { href: "/linkedin", label: "LinkedIn" },
+  { href: "/team", label: "Team" },
 ];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

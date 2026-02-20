@@ -13,6 +13,7 @@ load_dotenv()
 
 from database import init_db, get_db
 from analyzer import analyze_repo, ai_analyze, analyze_github_profile, TEAM_MEMBERS, recommend_reviewers, calculate_weighted_score
+from team_profiler import scan_org_profiles
 from linkedin_google import search_linkedin_candidates, get_linkedin_candidates, update_candidate_status as update_linkedin_status, init_linkedin_db
 from github_linkedin import bridge_github_candidates
 
@@ -172,7 +173,8 @@ async def get_report(candidate_id: int):
 
 
 @app.get("/api/candidates/{candidate_id}/recommended-reviewers")
-async def get_recommended_reviewers(candidate_id: int):
+async def get_recommended_reviewers(candidate_id: int, request: Request):
+    user_email = get_user_email(request)
     db = await get_db()
     row = await db.execute("SELECT scores, repo_analysis FROM candidates WHERE id = ?", (candidate_id,))
     candidate = await row.fetchone()
@@ -183,7 +185,7 @@ async def get_recommended_reviewers(candidate_id: int):
     scores = json.loads(candidate["scores"]) if candidate["scores"] else {}
     repo_analysis = json.loads(candidate["repo_analysis"]) if candidate["repo_analysis"] else {}
 
-    reviewers = await recommend_reviewers(scores, repo_analysis, db)
+    reviewers = await recommend_reviewers(scores, repo_analysis, db, exclude_email=user_email)
     await db.close()
     return {"reviewers": reviewers}
 
@@ -317,6 +319,54 @@ async def get_monitor_candidate(github_username: str):
         if c.get(f):
             c[f] = json.loads(c[f])
     return c
+
+
+# ── Team Profile Endpoints ────────────────────────────────────────────────
+
+
+@app.post("/api/team/profile-scan")
+async def team_profile_scan():
+    """Trigger a full org scan and profile generation."""
+    db = await get_db()
+    try:
+        result = await scan_org_profiles(db)
+        if "error" in result:
+            raise HTTPException(400, result["error"])
+        return result
+    finally:
+        await db.close()
+
+
+@app.get("/api/team/profiles")
+async def list_team_profiles():
+    """List all team member profiles with expertise."""
+    db = await get_db()
+    rows = await db.execute("SELECT * FROM team_profiles WHERE is_active = 1 ORDER BY review_count DESC, github_username")
+    profiles = []
+    for r in await rows.fetchall():
+        p = dict(r)
+        for f in ["expertise_areas", "top_repos", "languages"]:
+            if p.get(f):
+                p[f] = json.loads(p[f])
+        profiles.append(p)
+    await db.close()
+    return profiles
+
+
+@app.get("/api/team/profiles/{github_username}")
+async def get_team_profile(github_username: str):
+    """Get individual team member profile."""
+    db = await get_db()
+    row = await db.execute("SELECT * FROM team_profiles WHERE github_username = ?", (github_username,))
+    profile = await row.fetchone()
+    await db.close()
+    if not profile:
+        raise HTTPException(404, "Profile not found")
+    p = dict(profile)
+    for f in ["expertise_areas", "top_repos", "languages"]:
+        if p.get(f):
+            p[f] = json.loads(p[f])
+    return p
 
 
 # ── LinkedIn Sourcing Endpoints ──────────────────────────────────────────────

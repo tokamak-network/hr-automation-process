@@ -1,79 +1,103 @@
-# Tokamak HR Automation Process
+# Tokamak Hiring System
 
-AI 기반 채용 파이프라인 + 자동 후보자 추천 시스템. 이력서 대신 결과물(Track B)로 평가합니다.
+AI 기반 채용 자동화 시스템. 이력서 대신 결과물(Track B)로 평가하고, 후보자를 자동으로 발굴합니다.
 
-## 철학
+## 🎯 핵심 철학
 - **이력서 무의미** → 지원자가 토카막 생태계에 기여할 수 있는 결과물(코드/프로덕트)을 제출
-- **ATI 호환 평가** → 커밋, 코드 품질, 생태계 시너지를 AI가 자동 분석
-- **직군 구분 없음** → 내부 팀원과 외부 지원자에게 동일한 기준 적용 (Operation Spear Track B)
+- **Track B 기반 평가** → Problem Definition → Implementation → Deliverable (OS와 동일 기준)
+- **직군 구분 없음** → 내부 팀원과 외부 지원자에게 동일한 기준 적용
+- **아웃바운드 소싱 중심** → 우리가 먼저 후보자를 찾아서 제안하는 프로세스
 
 ---
 
-## 시스템 구성
+## 📋 주요 기능
 
-### 1. Core Pipeline (채용 평가)
+### 1. 후보자 평가 파이프라인 (Core Pipeline)
 후보자의 GitHub 레포를 AI가 자동 분석하여 스코어카드를 생성합니다.
 
-**흐름:**
 ```
-후보자 레포 URL 등록 → 레포 클론 → 코드 분석 → AI 평가 → 5차원 스코어카드 생성
+후보자 레포 URL 등록 → 레포 클론 → 코드 분석 → AI 평가 → Track B 스코어카드 생성 → 리뷰어 자동 매칭
 ```
 
-**5차원 평가 기준 (각 1~10점):**
-| 차원 | 설명 |
+**5차원 평가 기준 (가중치 적용):**
+| 차원 | 가중치 | 설명 |
+|------|--------|------|
+| Technical Completeness | 1.0x | 코드 품질, 아키텍처, 테스트 |
+| Ecosystem Fit | **2.0x** | 토카막 기존 레포와의 시너지 |
+| Tokenomics Impact | 1.5x | TON/STON 활용, 프로토콜 수준 기여 가능성 |
+| Innovation | 1.0x | 기존에 없는 접근, 차별점 |
+| AI Proficiency | 0.5x | AI 도구 활용 흔적 |
+
+**Track B 3단계 평가:**
+| 단계 | 기준 |
 |------|------|
-| Technical Completeness | 코드 품질, 아키텍처, 테스트 |
-| Ecosystem Fit | 토카막 기존 레포와의 시너지 |
-| Tokenomics Impact | TON/STON 활용, 프로토콜 수준 기여 가능성 |
-| Innovation | 기존에 없는 접근, 차별점 |
-| AI Proficiency | AI 도구 활용 흔적 |
+| Problem Definition | 문제를 명확하게 정의했는가? |
+| Implementation | 작동하는 코드/프로덕트가 있는가? |
+| Deliverable | 데모/문서/배포된 결과물이 있는가? |
 
-**최종 추천:** Strong Hire / Hire / Maybe / Pass
+**최종 추천:** Strong Hire / Hire / Maybe / Pass (가중 점수 기반)
 
-### 2. GitHub Monitor (자동 후보자 추천)
-[tokamak-network](https://github.com/tokamak-network) GitHub org의 모든 레포를 스캔하여 외부 활동자를 자동 감지합니다.
+### 2. GitHub Monitor (자동 후보자 감지)
+[tokamak-network](https://github.com/tokamak-network) GitHub org의 레포를 스캔하여 외부 활동자를 자동 감지합니다.
 
-**감지 대상:**
-- org 레포에 ⭐ Star를 누른 사람
-- org 레포를 Fork한 사람
-- PR을 제출한 외부 기여자
-- Issue를 작성한 외부 사용자
+- ⭐ Star, Fork, PR 제출, Issue 작성 등 모든 외부 활동 추적
+- 내부 팀원 16명 자동 제외
+- GitHub 프로필 기반 잠재력 스코어링
 
-**자동 필터링:** 내부 팀원 16명은 자동 제외됩니다.
+### 3. LinkedIn 소싱 (아웃바운드)
+웹 검색 기반으로 블록체인 개발자 LinkedIn 프로필을 자동 발굴합니다.
 
-감지된 외부 활동자의 GitHub 프로필을 AI가 분석하여 잠재 후보자로 스코어링합니다.
+- **18개 검색 쿼리**: Solidity, ZK, Rollup, DeFi, Rust 등 다양한 키워드
+- **Brave Search API** 또는 DuckDuckGo 폴백 (API 키 없이도 동작)
+- **Open To Work 감지**: 구직 중인 후보자 우선 표시
+- **GitHub↔LinkedIn 브릿지**: GitHub Monitor 후보자의 LinkedIn 프로필 자동 매칭
+- **아웃리치 워크플로우**: discovered → 연락 대상 → 연락 완료 → 응답/거절
+
+### 4. 팀원 자동 추천 (Reviewer Matching)
+후보자의 기술 스택을 분석하여 최적의 내부 리뷰어를 자동 추천합니다.
+
+| 팀원 | 전문 분야 |
+|------|-----------|
+| Member 1 (member-1) | Protocol, Tokenomics, Architecture |
+| Member 2 (member-2) | Full-stack, Ops, Blockchain |
+| Member 3 (member-3) | Frontend, UI/UX |
+| Member 4 (member-4) | L2, Bridge, Core Protocol |
+
+### 5. 다중 사용자 지원
+- 관리자/리뷰어/뷰어 역할 분리
+- 누가 어떤 후보자를 분석/리뷰했는지 추적
+- 상단 네비게이션에서 사용자 전환
 
 ---
 
-## 사용 방법
+## 🚀 시작하기
 
 ### 환경 설정
 
 ```bash
-# 1. .env 파일 생성
+# .env 파일 생성
 cp .env.example backend/.env
 ```
 
 `.env` 설정:
 ```
-GITHUB_TOKEN=ghp_xxx        # GitHub Personal Access Token (org 레포 읽기 권한 필요)
+GITHUB_TOKEN=ghp_xxx        # GitHub Personal Access Token
 AI_API_KEY=sk-xxx            # AI API 키 (OpenAI 호환)
 AI_API_URL=https://api.openai.com/v1/chat/completions
-AI_MODEL=gpt-4o-mini         # 사용할 모델
+AI_MODEL=gpt-4o-mini
+BRAVE_API_KEY=xxx            # (선택) Brave Search API 키
 ```
 
-### Backend 실행
+### 실행
 
 ```bash
+# Backend
 cd backend
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8001
-```
 
-### Frontend 실행
-
-```bash
+# Frontend
 cd frontend
 npm install
 npm run dev -- -p 3002
@@ -81,70 +105,101 @@ npm run dev -- -p 3002
 
 ### 접속
 - **Dashboard**: http://localhost:3002
-- **API**: http://localhost:8001/docs (Swagger UI)
+- **API Docs**: http://localhost:8001/docs
 
 ---
 
-## 주요 기능 설명
+## 📡 API 엔드포인트
 
-### Submit Candidate (후보자 등록)
-**누가 쓰나?** 내부 관리자가 사용합니다.
-**용도:** 후보자의 레포 URL과 기본 정보를 등록하면, AI가 해당 레포를 분석합니다.
-
-**사용 시나리오:**
-1. 외부에서 지원자가 결과물 레포 URL을 전달 (이메일, LinkedIn DM 등)
-2. 관리자가 Dashboard → Submit 페이지에서 등록
-3. Analyze 버튼 클릭 → AI가 레포를 클론 + 분석 + 스코어카드 생성
-4. Candidates 목록에서 점수 확인 및 비교
-
-### Monitor (자동 후보자 감지)
-**누가 쓰나?** 시스템이 자동 실행 (또는 관리자가 수동 스캔 트리거).
-**용도:** tokamak-network org에 관심을 보이는 외부 개발자를 자동으로 찾아냅니다.
-
-**사용 시나리오:**
-1. Dashboard → Monitor 페이지에서 "Scan" 실행
-2. org의 모든 레포를 순회하며 외부 활동자 수집
-3. 각 활동자의 GitHub 프로필을 AI가 분석
-4. 잠재 후보자 리스트가 점수와 함께 표시됨
-5. 유망한 사람에게 직접 컨택 가능
-
----
-
-## API 엔드포인트
-
+### 후보자 관리
 | Method | Endpoint | 설명 |
 |--------|----------|------|
 | POST | `/api/candidates/submit` | 후보자 등록 |
 | POST | `/api/candidates/{id}/analyze` | AI 분석 실행 |
 | GET | `/api/candidates` | 전체 후보자 목록 |
-| GET | `/api/candidates/{id}` | 후보자 상세 스코어카드 |
+| GET | `/api/candidates/{id}` | 후보자 상세 (스코어카드 + Track B) |
 | GET | `/api/candidates/{id}/report` | AI 평가 리포트 |
-| POST | `/api/monitor/scan` | GitHub org 스캔 실행 |
-| GET | `/api/monitor/candidates` | 자동 감지된 후보자 목록 |
-| GET | `/api/monitor/candidates/{username}` | 후보자 상세 프로필 |
+| GET | `/api/candidates/{id}/recommended-reviewers` | 추천 리뷰어 |
+| POST | `/api/candidates/{id}/review` | 리뷰 제출 |
+
+### GitHub Monitor
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| POST | `/api/monitor/scan` | GitHub org 스캔 |
+| GET | `/api/monitor/candidates` | 감지된 후보자 목록 |
+
+### LinkedIn 소싱
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| POST | `/api/linkedin/search` | LinkedIn 후보자 검색 |
+| GET | `/api/linkedin/candidates` | LinkedIn 후보자 목록 |
+| POST | `/api/linkedin/candidates/{id}/outreach` | 상태 변경 |
+| POST | `/api/linkedin/bridge` | GitHub↔LinkedIn 매칭 |
+
+### 사용자
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| GET | `/api/users` | 사용자 목록 |
+| GET | `/api/users/me` | 현재 사용자 (X-User-Email 헤더) |
 
 ---
+
+## 🏗️ 시스템 구조
+
+```
+tokamak-hiring/
+├── backend/
+│   ├── main.py              # FastAPI 서버 + API 라우트
+│   ├── database.py          # SQLite 스키마 + 연결
+│   ├── analyzer.py          # 레포 분석 + AI 평가 + Track B + 리뷰어 추천
+│   ├── linkedin_google.py   # 웹 검색 기반 LinkedIn 소싱
+│   ├── github_linkedin.py   # GitHub↔LinkedIn 브릿지
+│   ├── linkedin_scraper.py  # LinkedIn Voyager API (레거시, 폴백)
+│   └── hiring.db            # SQLite 데이터베이스
+├── frontend/
+│   ├── app/
+│   │   ├── page.tsx         # 후보자 목록 (대시보드)
+│   │   ├── submit/page.tsx  # 후보자 등록
+│   │   ├── candidates/[id]/ # 후보자 상세 (스코어카드 + Track B + 리뷰어)
+│   │   ├── monitor/page.tsx # GitHub Monitor
+│   │   ├── linkedin/page.tsx# LinkedIn 소싱
+│   │   ├── layout.tsx       # 네비게이션 + 사용자 선택
+│   │   └── UserContext.tsx   # 사용자 상태 관리
+│   └── ...
+└── docs/
+    └── LINKEDIN_SETUP.md    # LinkedIn 설정 가이드
+```
 
 ## 포트 배정
-| 서비스 | 포트 | 비고 |
-|--------|------|------|
-| HR Backend | 8001 | FastAPI + SQLite |
-| HR Frontend | 3002 | Next.js + Tailwind |
-| Report Generator Backend | 8000 | (별도 프로젝트) |
-| Report Generator Frontend | 3001 | (별도 프로젝트) |
+| 서비스 | 포트 |
+|--------|------|
+| Hiring Backend | 8001 |
+| Hiring Frontend | 3002 |
+| Report Generator Backend | 8000 |
+| Report Generator Frontend | 3001 |
 
 ---
 
-## 향후 계획 (Phase 2)
-- [ ] LinkedIn 자동 서칭 + 아웃리치 메시지 발송
+## 🗺️ 로드맵
+
+- [x] Core Pipeline (후보자 등록 → AI 분석 → 스코어카드)
+- [x] Track B 평가 체계 (가중치 + 3단계)
+- [x] 다중 사용자 지원 (역할 기반)
+- [x] GitHub Monitor (자동 후보자 감지)
+- [x] LinkedIn 소싱 (웹 검색 기반)
+- [x] GitHub↔LinkedIn 브릿지
+- [x] 팀원 자동 추천
+- [ ] LinkedIn DM 자동 아웃리치
 - [ ] 지원자 셀프 서비스 제출 페이지 (외부 공개용)
 - [ ] Thanks/피어리뷰 시스템 (소프트 스킬 평가)
 - [ ] 자동 정기 스캔 (cron)
-- [ ] 평가/온보딩/퇴사 프로세스 통합
+- [ ] 인터뷰 스케줄링 자동화
+- [ ] tokamak.network 연동 (라이브 대시보드)
 
 ---
 
 ## Tech Stack
-- **Backend**: Python 3.9+, FastAPI, SQLite, PyGithub
-- **Frontend**: Next.js 15, React, Tailwind CSS
+- **Backend**: Python 3.9+, FastAPI, SQLite, PyGithub, httpx
+- **Frontend**: Next.js 16, React, Tailwind CSS
 - **AI**: OpenAI 호환 API (모델 설정 가능)
+- **Search**: Brave Search API / DuckDuckGo (폴백)

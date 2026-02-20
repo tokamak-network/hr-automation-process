@@ -311,6 +311,11 @@ export default function LinkedInPage() {
           </button>
         </div>
 
+        {/* Dedup notice */}
+        <p className="text-xs text-gray-400 mb-2">
+          ℹ️ 동일 후보자는 최초 검색 후 <strong>30일 이내</strong> 재검색 시 중복으로 처리되어 건너뜁니다. 30일 이후에는 갱신됩니다.
+        </p>
+
         {/* Search result */}
         {searchResult && (
           <div className={`mt-3 text-sm p-3 rounded border ${searchResult.error ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>

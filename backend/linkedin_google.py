@@ -224,8 +224,17 @@ def save_candidate(candidate: dict, score: float, source: str = "search") -> boo
     """Save candidate to database."""
     conn = sqlite3.connect(DB_PATH)
     try:
+        # Skip if same candidate was found within last 30 days
+        existing = conn.execute(
+            "SELECT created_at FROM linkedin_candidates WHERE linkedin_username = ? AND created_at >= datetime('now', '-30 days')",
+            (candidate["linkedin_username"],)
+        ).fetchone()
+        if existing:
+            conn.close()
+            return False
+        
         conn.execute("""
-            INSERT OR IGNORE INTO linkedin_candidates
+            INSERT OR REPLACE INTO linkedin_candidates
             (linkedin_username, full_name, headline, location, profile_url,
              open_to_work, search_keyword, raw_data, score, created_at, source)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

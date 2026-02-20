@@ -293,9 +293,17 @@ async def scan_github():
 
 
 @app.get("/api/monitor/candidates")
-async def list_monitor_candidates():
+async def list_monitor_candidates(activity_within: str = ""):
+    """List monitor candidates. activity_within: 1w, 1m, 3m to filter by last_scanned."""
     db = await get_db()
-    rows = await db.execute("SELECT * FROM monitor_candidates ORDER BY last_scanned DESC")
+    query = "SELECT * FROM monitor_candidates"
+    params = []
+    if activity_within in ("1w", "1m", "3m"):
+        days_map = {"1w": 7, "1m": 30, "3m": 90}
+        query += " WHERE last_scanned >= datetime('now', ?)"
+        params.append(f"-{days_map[activity_within]} days")
+    query += " ORDER BY last_scanned DESC"
+    rows = await db.execute(query, params)
     candidates = []
     for r in await rows.fetchall():
         c = dict(r)

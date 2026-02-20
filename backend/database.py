@@ -70,6 +70,17 @@ async def init_db():
         skills TEXT NOT NULL,
         UNIQUE(user_email)
     );
+    CREATE TABLE IF NOT EXISTS monitor_activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        github_username TEXT NOT NULL,
+        activity_type TEXT NOT NULL,
+        repo_name TEXT,
+        activity_url TEXT,
+        activity_date TEXT,
+        details TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(github_username, activity_type, activity_url)
+    );
     CREATE TABLE IF NOT EXISTS team_profiles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         github_username TEXT UNIQUE NOT NULL,

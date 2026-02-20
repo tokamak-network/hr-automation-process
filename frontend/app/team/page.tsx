@@ -57,7 +57,7 @@ export default function TeamPage() {
   const strengthColor = (score: number) => {
     if (score >= 0.7) return "bg-green-900/50 text-green-300 border-green-700/50";
     if (score >= 0.4) return "bg-blue-900/50 text-blue-300 border-blue-700/50";
-    return "bg-gray-800/50 text-gray-400 border-gray-700/50";
+    return "text-gray-400 border-gray-700/50";
   };
 
   const topLangs = (langs: Record<string, number>) => {
@@ -71,12 +71,13 @@ export default function TeamPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Team Profiles</h1>
-          <p className="text-gray-500 text-sm mt-1">Auto-detected expertise from GitHub activity</p>
+          <p className="text-sm mt-1" style={{ color: "var(--color-text-muted)" }}>Auto-detected expertise from GitHub activity</p>
         </div>
         <button
           onClick={triggerScan}
           disabled={scanning}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-sm font-medium transition"
+          className="px-4 py-2 disabled:opacity-50 rounded-lg text-sm font-medium text-white hover:brightness-110 transition"
+          style={{ background: "var(--color-primary)" }}
         >
           {scanning ? "Scanning..." : "🔄 Scan Profiles"}
         </button>
@@ -91,16 +92,16 @@ export default function TeamPage() {
       )}
 
       {loading ? (
-        <p className="text-gray-500">Loading profiles...</p>
+        <p style={{ color: "var(--color-text-muted)" }}>Loading profiles...</p>
       ) : profiles.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
+        <div className="text-center py-16" style={{ color: "var(--color-text-muted)" }}>
           <p className="text-lg mb-2">No team profiles yet</p>
           <p className="text-sm">Click &quot;Scan Profiles&quot; to analyze GitHub activity</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {profiles.map(p => (
-            <div key={p.github_username} className="bg-gray-900 rounded-lg p-5 border border-gray-800 hover:border-gray-700 transition">
+            <div key={p.github_username} className="rounded-lg p-5 hover:brightness-110 transition" style={{ background: "var(--color-card)", border: "1px solid var(--color-border)" }}>
               <div className="flex items-start gap-3 mb-3">
                 {p.avatar_url && (
                   <img src={p.avatar_url} alt={p.github_username} className="w-12 h-12 rounded-full" />
@@ -110,13 +111,14 @@ export default function TeamPage() {
                   <a
                     href={`https://github.com/${p.github_username}`}
                     target="_blank"
-                    className="text-sm text-gray-500 hover:text-blue-400"
+                    className="text-sm hover:underline"
+                    style={{ color: "var(--color-text-muted)" }}
                   >
                     @{p.github_username}
                   </a>
                 </div>
                 {p.review_count > 0 && (
-                  <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">
+                  <span className="text-xs px-2 py-1 rounded" style={{ color: "var(--color-text-muted)", background: "var(--color-bg)" }}>
                     {p.review_count} reviews
                   </span>
                 )}
@@ -128,6 +130,7 @@ export default function TeamPage() {
                   <span
                     key={area}
                     className={`text-xs px-2 py-0.5 rounded border ${strengthColor(score)}`}
+                    style={score < 0.4 ? { background: "var(--color-bg)" } : {}}
                     title={`Score: ${score}`}
                   >
                     {area}
@@ -138,13 +141,13 @@ export default function TeamPage() {
 
               {/* Top Repos */}
               {p.top_repos && p.top_repos.length > 0 && (
-                <div className="text-xs text-gray-500 mb-2">
-                  <span className="text-gray-600">Top repos: </span>
+                <div className="text-xs mb-2" style={{ color: "var(--color-text-muted)" }}>
+                  <span style={{ color: "var(--color-text-muted)" }}>Top repos: </span>
                   {p.top_repos.slice(0, 4).map((r, i) => (
                     <span key={r.name}>
                       {i > 0 && " · "}
-                      <span className="text-gray-400">{r.name}</span>
-                      <span className="text-gray-600"> ({r.commits})</span>
+                      <span style={{ color: "var(--color-text-secondary)" }}>{r.name}</span>
+                      <span style={{ color: "var(--color-text-muted)" }}> ({r.commits})</span>
                     </span>
                   ))}
                 </div>
@@ -153,14 +156,14 @@ export default function TeamPage() {
               {/* Languages */}
               <div className="flex flex-wrap gap-1.5">
                 {topLangs(p.languages).map(([lang, count]) => (
-                  <span key={lang} className="text-xs text-gray-500 bg-gray-800/50 px-1.5 py-0.5 rounded">
+                  <span key={lang} className="text-xs px-1.5 py-0.5 rounded" style={{ color: "var(--color-text-muted)", background: "var(--color-bg)" }}>
                     {lang}
                   </span>
                 ))}
               </div>
 
               {p.last_profiled && (
-                <div className="text-xs text-gray-600 mt-2">
+                <div className="text-xs mt-2" style={{ color: "var(--color-text-muted)" }}>
                   Profiled: {new Date(p.last_profiled).toLocaleDateString()}
                 </div>
               )}

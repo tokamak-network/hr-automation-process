@@ -19,13 +19,16 @@ const navLinks = [
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-gray-950 text-gray-100 min-h-screen">
+      <body className="min-h-screen" style={{ background: "var(--color-bg)", color: "var(--color-text)" }}>
         <UserProvider>
-          <nav className="border-b border-gray-800 bg-gray-900/80 backdrop-blur sticky top-0 z-50">
+          <nav className="border-b sticky top-0 z-50 backdrop-blur" style={{ borderColor: "var(--color-border)", background: "rgba(15, 15, 26, 0.85)" }}>
             <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-6">
-              <span className="font-bold text-lg text-blue-400">⚛ Tokamak Hiring</span>
+              <a href="/" className="flex items-center gap-2 shrink-0">
+                <img src="/tokamak-logo-white.png" alt="Tokamak Network" className="h-7 w-auto" />
+                <span className="text-sm font-medium" style={{ color: "var(--color-text-secondary)" }}>Hiring</span>
+              </a>
               {navLinks.map(l => (
-                <a key={l.href} href={l.href} className="text-sm text-gray-400 hover:text-white transition">{l.label}</a>
+                <a key={l.href} href={l.href} className="text-sm hover:text-white transition" style={{ color: "var(--color-text-secondary)" }}>{l.label}</a>
               ))}
               <div className="ml-auto">
                 <UserSelector />

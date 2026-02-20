@@ -27,26 +27,26 @@ export default function SubmitPage() {
       <form onSubmit={submit} className="space-y-4">
         {(["name", "email", "repo_url", "description"] as const).map(field => (
           <div key={field}>
-            <label className="block text-sm text-gray-400 mb-1 capitalize">{field.replace("_", " ")}</label>
+            <label className="block text-sm mb-1 capitalize" style={{ color: "var(--color-text-secondary)" }}>{field.replace("_", " ")}</label>
             {field === "description" ? (
               <textarea value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })}
-                className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none" rows={3} />
+                className="w-full rounded px-3 py-2 text-sm outline-none" style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text)" }} rows={3} />
             ) : (
               <input value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })}
-                className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none"
-                required={field !== "description"} type={field === "email" ? "email" : "text"} />
+                className="w-full rounded px-3 py-2 text-sm outline-none" style={{ background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
+                required type={field === "email" ? "email" : "text"} />
             )}
           </div>
         ))}
         <button type="submit" disabled={loading}
-          className="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded text-sm font-medium disabled:opacity-50">
+          className="px-4 py-2 rounded text-sm font-medium disabled:opacity-50 text-white hover:brightness-110" style={{ background: "var(--color-primary)" }}>
           {loading ? "Submitting..." : "Submit"}
         </button>
       </form>
       {result && (
-        <div className="mt-4 p-3 bg-gray-900 rounded text-sm">
+        <div className="mt-4 p-3 rounded text-sm" style={{ background: "var(--color-card)", border: "1px solid var(--color-border)" }}>
           {result.error ? <span className="text-red-400">{result.error}</span> :
-            <span className="text-green-400">Submitted! ID: {result.id}. <a href="/" className="text-blue-400 underline">View candidates</a></span>}
+            <span className="text-green-400">Submitted! ID: {result.id}. <a href="/" style={{ color: "var(--color-primary)" }} className="underline">View candidates</a></span>}
         </div>
       )}
     </div>

@@ -11,7 +11,12 @@ export default function UserSelector() {
         const user = users.find(u => u.email === e.target.value) || null;
         setCurrentUser(user);
       }}
-      className="bg-gray-800 border border-gray-700 text-sm rounded px-2 py-1 text-gray-300 focus:border-blue-500 outline-none"
+      className="text-sm rounded px-2 py-1 outline-none"
+      style={{
+        background: "var(--color-card)",
+        border: "1px solid var(--color-border)",
+        color: "var(--color-text-secondary)",
+      }}
     >
       <option value="">Select user...</option>
       {users.map(u => (

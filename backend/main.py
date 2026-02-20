@@ -223,39 +223,49 @@ async def scan_github():
     except Exception as e:
         raise HTTPException(400, "Failed to access org: {}".format(e))
 
-    external_users = set()
+    # Track external users with their last activity date on tokamak-network
+    external_users = {}  # username -> last_activity_date (ISO string)
     repos_scanned = 0
+
+    def _update_activity(login, activity_date):
+        """Track the most recent activity date per user."""
+        if login in TEAM_MEMBERS:
+            return
+        dt_str = activity_date.isoformat() if activity_date else None
+        if dt_str and (login not in external_users or dt_str > external_users[login]):
+            external_users[login] = dt_str
 
     for repo in org.get_repos(sort="updated")[:30]:
         repos_scanned += 1
+        # Stargazers (no date available from API, use repo updated_at as proxy)
         try:
             for stargazer in repo.get_stargazers()[:50]:
-                if stargazer.login not in TEAM_MEMBERS:
-                    external_users.add(stargazer.login)
+                _update_activity(stargazer.login, repo.updated_at)
         except:
             pass
+        # Forks
         try:
             for fork in repo.get_forks()[:20]:
-                if fork.owner.login not in TEAM_MEMBERS:
-                    external_users.add(fork.owner.login)
+                _update_activity(fork.owner.login, fork.created_at)
         except:
             pass
+        # PRs (use created_at or updated_at)
         try:
-            for pr in repo.get_pulls(state="all")[:20]:
-                if pr.user.login not in TEAM_MEMBERS:
-                    external_users.add(pr.user.login)
+            for pr in repo.get_pulls(state="all", sort="updated", direction="desc")[:20]:
+                _update_activity(pr.user.login, pr.updated_at or pr.created_at)
         except:
             pass
+        # Issues
         try:
-            for issue in repo.get_issues(state="all")[:20]:
-                if issue.user.login not in TEAM_MEMBERS:
-                    external_users.add(issue.user.login)
+            for issue in repo.get_issues(state="all", sort="updated", direction="desc")[:20]:
+                if not issue.pull_request:  # skip PRs listed as issues
+                    _update_activity(issue.user.login, issue.updated_at or issue.created_at)
         except:
             pass
 
     db = await get_db()
     analyzed = 0
-    for username in list(external_users)[:50]:
+    for username in list(external_users.keys())[:50]:
         profile = await analyze_github_profile(g, username)
         if "error" in profile:
             continue
@@ -283,7 +293,7 @@ async def scan_github():
             username, profile.get("profile_url", ""), profile.get("bio", ""),
             profile.get("public_repos", 0), profile.get("followers", 0),
             json.dumps(langs), json.dumps(profile.get("recent_repos", [])),
-            json.dumps(scores), datetime.utcnow().isoformat()
+            json.dumps(scores), external_users.get(username, datetime.utcnow().isoformat())
         ))
         analyzed += 1
 

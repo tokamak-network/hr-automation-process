@@ -286,6 +286,11 @@ async def scan_github():
     db = await get_db()
 
     # Save activities (dedup via UNIQUE constraint)
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("monitor")
+    logger.info("Total activities collected: %d", len(activities))
+    saved_acts = 0
     for login, atype, repo_name, url, dt_str, details in activities:
         try:
             await db.execute("""
@@ -293,8 +298,10 @@ async def scan_github():
                 (github_username, activity_type, repo_name, activity_url, activity_date, details)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (login, atype, repo_name, url, dt_str, details))
-        except Exception:
-            pass
+            saved_acts += 1
+        except Exception as e:
+            logger.error("Failed to save activity: %s %s %s - %s", login, atype, url, e)
+    logger.info("Activities saved: %d", saved_acts)
 
     # Analyze profiles
     analyzed = 0

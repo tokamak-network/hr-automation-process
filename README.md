@@ -26,3 +26,4 @@ AI-powered hiring pipeline for Tokamak Network. No resumes — results only.
 - **Frontend**: Next.js (consistent with report generator)
 - **AI**: Multi-model support via existing Tokamak API proxy
 - **GitHub**: PyGithub for API access
+# hr-automation-process

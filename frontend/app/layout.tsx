@@ -9,7 +9,6 @@ export const metadata: Metadata = {
 };
 
 const navLinks = [
-  { href: "/", label: "Candidates" },
   { href: "/submit", label: "Submit" },
   { href: "/monitor", label: "Monitor" },
   { href: "/linkedin", label: "LinkedIn" },
@@ -19,16 +18,16 @@ const navLinks = [
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen" style={{ background: "var(--color-bg)", color: "var(--color-text)" }}>
+      <body className="min-h-screen bg-white text-gray-900">
         <UserProvider>
-          <nav className="border-b sticky top-0 z-50 backdrop-blur" style={{ borderColor: "var(--color-border)", background: "rgba(15, 15, 26, 0.85)" }}>
+          <nav className="border-b border-gray-800 sticky top-0 z-50" style={{ background: "#1C1C1C" }}>
             <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-6">
               <a href="/" className="flex items-center gap-2 shrink-0">
-                <img src="/tokamak-logo-white.png" alt="Tokamak Network" className="h-7 w-auto" />
-                <span className="text-sm font-medium" style={{ color: "var(--color-text-secondary)" }}>Hiring</span>
+                <img src="/tokamak-logo-white.png" alt="Tokamak Network" className="h-8 w-auto" />
+                <span className="text-base font-semibold text-white">Hiring</span>
               </a>
               {navLinks.map(l => (
-                <a key={l.href} href={l.href} className="text-sm hover:text-white transition" style={{ color: "var(--color-text-secondary)" }}>{l.label}</a>
+                <a key={l.href} href={l.href} className="text-sm text-gray-400 hover:text-white transition">{l.label}</a>
               ))}
               <div className="ml-auto">
                 <UserSelector />

@@ -2,17 +2,19 @@
 
 :root {
   --color-primary: #2A72E5;
-  --color-primary-hover: #3B82F6;
-  --color-bg: #0F0F1A;
-  --color-card: #1A1B2E;
-  --color-card-hover: #1F2037;
-  --color-border: #2A2B3E;
-  --color-border-hover: #3A3B4E;
-  --color-text: #FFFFFF;
-  --color-text-secondary: #9CA3AF;
-  --color-text-muted: #6B7280;
-  --background: #0F0F1A;
-  --foreground: #FFFFFF;
+  --color-primary-hover: #1E5FCC;
+  --color-bg: #FFFFFF;
+  --color-card: #FFFFFF;
+  --color-card-hover: #F9FAFB;
+  --color-border: #E5E7EB;
+  --color-border-hover: #D1D5DB;
+  --color-text: #1C1C1C;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #9CA3AF;
+  --color-nav: #1C1C1C;
+  --color-table-header: #F9FAFB;
+  --background: #FFFFFF;
+  --foreground: #1C1C1C;
 }
 
 @theme inline {

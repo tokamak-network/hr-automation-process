@@ -300,7 +300,7 @@ async def search_linkedin_candidates(
 
 def get_linkedin_candidates(
     status: Optional[str] = None,
-    limit: int = 50,
+    limit: int = 100,
     offset: int = 0,
 ) -> List[Dict]:
     """Get LinkedIn candidates from DB."""

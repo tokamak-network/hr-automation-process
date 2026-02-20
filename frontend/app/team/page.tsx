@@ -39,8 +39,12 @@ export default function TeamPage() {
     try {
       const res = await fetch(`${API}/api/team/profile-scan`, { method: "POST" });
       const data = await res.json();
-      setScanResult(data);
-      loadProfiles();
+      if (!res.ok) {
+        setScanResult({ error: data.detail || "Scan failed" });
+      } else {
+        setScanResult(data);
+        loadProfiles();
+      }
     } catch (e: any) {
       setScanResult({ error: e.message });
     } finally {
@@ -48,127 +52,106 @@ export default function TeamPage() {
     }
   };
 
-  const topExpertise = (areas: Record<string, number>) => {
-    return Object.entries(areas || {})
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8);
-  };
+  const topSkills = (areas: Record<string, number>) =>
+    Object.entries(areas || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-  const strengthColor = (score: number) => {
-    if (score >= 0.7) return "bg-green-900/50 text-green-300 border-green-700/50";
-    if (score >= 0.4) return "bg-blue-900/50 text-blue-300 border-blue-700/50";
-    return "text-gray-400 border-gray-700/50";
-  };
-
-  const topLangs = (langs: Record<string, number>) => {
-    return Object.entries(langs || {})
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
-  };
+  const topRepos = (repos: { name: string; commits: number; language: string }[]) =>
+    (repos || []).slice(0, 3);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Team Profiles</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--color-text-muted)" }}>Auto-detected expertise from GitHub activity</p>
+          <h1 className="text-2xl font-bold text-gray-900">Team Profiles</h1>
+          <p className="text-sm mt-1 text-gray-400">Reviewer pool — auto-matched to candidates for interviews</p>
         </div>
         <button
           onClick={triggerScan}
           disabled={scanning}
-          className="px-4 py-2 disabled:opacity-50 rounded-lg text-sm font-medium text-white hover:brightness-110 transition"
-          style={{ background: "var(--color-primary)" }}
+          className="px-4 py-2 disabled:opacity-50 rounded text-sm font-medium text-white bg-[#1C1C1C] hover:bg-gray-800 transition"
         >
           {scanning ? "Scanning..." : "🔄 Scan Profiles"}
         </button>
       </div>
 
       {scanResult && (
-        <div className={`mb-6 p-4 rounded-lg text-sm ${scanResult.error ? "bg-red-900/30 text-red-300" : "bg-green-900/30 text-green-300"}`}>
+        <div className={`mb-6 p-4 rounded text-sm border ${scanResult.error ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
           {scanResult.error
-            ? `Error: ${scanResult.error}`
-            : `Scanned ${scanResult.repos_scanned} repos · Found ${scanResult.members_found} members · Created ${scanResult.profiles_created} profiles`}
+            ? <span className="text-red-600">⚠️ {scanResult.error}</span>
+            : <span className="text-green-700">✅ Scanned {scanResult.repos_scanned} repos · Found {scanResult.members_found} members · Created {scanResult.profiles_created} profiles</span>}
         </div>
       )}
 
       {loading ? (
-        <p style={{ color: "var(--color-text-muted)" }}>Loading profiles...</p>
+        <p className="text-gray-400">Loading profiles...</p>
       ) : profiles.length === 0 ? (
-        <div className="text-center py-16" style={{ color: "var(--color-text-muted)" }}>
-          <p className="text-lg mb-2">No team profiles yet</p>
-          <p className="text-sm">Click &quot;Scan Profiles&quot; to analyze GitHub activity</p>
+        <div className="text-center py-16 border border-gray-200 rounded-lg bg-gray-50">
+          <p className="text-lg mb-2 text-gray-600">No team profiles yet</p>
+          <p className="text-sm text-gray-400 mb-4">Scan GitHub activity to build the reviewer pool. This requires GITHUB_TOKEN in your backend .env file.</p>
+          <button
+            onClick={triggerScan}
+            disabled={scanning}
+            className="px-6 py-3 rounded text-sm font-medium text-white bg-[#1C1C1C] hover:bg-gray-800"
+          >
+            {scanning ? "Scanning..." : "🔍 Scan Profiles Now"}
+          </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {profiles.map(p => (
-            <div key={p.github_username} className="rounded-lg p-5 hover:brightness-110 transition" style={{ background: "var(--color-card)", border: "1px solid var(--color-border)" }}>
-              <div className="flex items-start gap-3 mb-3">
-                {p.avatar_url && (
-                  <img src={p.avatar_url} alt={p.github_username} className="w-12 h-12 rounded-full" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-white">{p.display_name || p.github_username}</div>
-                  <a
-                    href={`https://github.com/${p.github_username}`}
-                    target="_blank"
-                    className="text-sm hover:underline"
-                    style={{ color: "var(--color-text-muted)" }}
-                  >
-                    @{p.github_username}
-                  </a>
-                </div>
-                {p.review_count > 0 && (
-                  <span className="text-xs px-2 py-1 rounded" style={{ color: "var(--color-text-muted)", background: "var(--color-bg)" }}>
-                    {p.review_count} reviews
-                  </span>
-                )}
-              </div>
-
-              {/* Expertise Tags */}
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {topExpertise(p.expertise_areas).map(([area, score]) => (
-                  <span
-                    key={area}
-                    className={`text-xs px-2 py-0.5 rounded border ${strengthColor(score)}`}
-                    style={score < 0.4 ? { background: "var(--color-bg)" } : {}}
-                    title={`Score: ${score}`}
-                  >
-                    {area}
-                    <span className="ml-1 opacity-60">{Math.round(score * 100)}%</span>
-                  </span>
-                ))}
-              </div>
-
-              {/* Top Repos */}
-              {p.top_repos && p.top_repos.length > 0 && (
-                <div className="text-xs mb-2" style={{ color: "var(--color-text-muted)" }}>
-                  <span style={{ color: "var(--color-text-muted)" }}>Top repos: </span>
-                  {p.top_repos.slice(0, 4).map((r, i) => (
-                    <span key={r.name}>
-                      {i > 0 && " · "}
-                      <span style={{ color: "var(--color-text-secondary)" }}>{r.name}</span>
-                      <span style={{ color: "var(--color-text-muted)" }}> ({r.commits})</span>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Languages */}
-              <div className="flex flex-wrap gap-1.5">
-                {topLangs(p.languages).map(([lang, count]) => (
-                  <span key={lang} className="text-xs px-1.5 py-0.5 rounded" style={{ color: "var(--color-text-muted)", background: "var(--color-bg)" }}>
-                    {lang}
-                  </span>
-                ))}
-              </div>
-
-              {p.last_profiled && (
-                <div className="text-xs mt-2" style={{ color: "var(--color-text-muted)" }}>
-                  Profiled: {new Date(p.last_profiled).toLocaleDateString()}
-                </div>
-              )}
-            </div>
-          ))}
+        <div className="rounded-lg overflow-hidden border border-gray-200">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-500 border-b border-gray-200 bg-gray-50">
+                <th className="py-3 px-4">Name</th>
+                <th className="py-3 px-4">GitHub</th>
+                <th className="py-3 px-4">Main Work</th>
+                <th className="py-3 px-4">Key Skills</th>
+                <th className="py-3 px-4">Last Active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profiles.map(p => (
+                <tr key={p.github_username} className="hover:bg-gray-50 transition border-b border-gray-200">
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2">
+                      {p.avatar_url && <img src={p.avatar_url} alt="" className="w-8 h-8 rounded-full" />}
+                      <span className="font-medium text-gray-900">{p.display_name || p.github_username}</span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <a href={`https://github.com/${p.github_username}`} target="_blank" className="text-[#2A72E5] hover:underline">
+                      @{p.github_username}
+                    </a>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex flex-wrap gap-1">
+                      {topRepos(p.top_repos).map(r => (
+                        <span key={r.name} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                          {r.name} <span className="text-gray-400">({r.commits})</span>
+                        </span>
+                      ))}
+                      {(!p.top_repos || p.top_repos.length === 0) && <span className="text-gray-400 text-xs">—</span>}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex flex-wrap gap-1">
+                      {topSkills(p.expertise_areas).map(([skill, score]) => (
+                        <span key={skill} className={`text-xs px-2 py-0.5 rounded ${
+                          score >= 0.7 ? 'bg-green-100 text-green-700' :
+                          score >= 0.4 ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-xs text-gray-400">
+                    {p.last_profiled ? new Date(p.last_profiled).toLocaleDateString() : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

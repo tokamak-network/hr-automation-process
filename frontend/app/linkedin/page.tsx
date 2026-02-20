@@ -52,6 +52,7 @@ export default function LinkedInPage() {
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set("status", statusFilter);
+      params.set("limit", "100");
       const res = await fetch(`${API}/api/linkedin/candidates?${params}`);
       const data = await res.json();
       setCandidates(data);
@@ -114,36 +115,49 @@ export default function LinkedInPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">🔗 LinkedIn Sourcing</h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-900">🔗 LinkedIn Sourcing</h1>
 
       {/* Search Section */}
-      <div className="rounded-lg p-6 mb-6" style={{ background: "var(--color-card)", border: "1px solid var(--color-border)" }}>
-        <h2 className="text-lg font-semibold mb-3 text-white">Search for Candidates</h2>
+      <div className="rounded-lg p-6 mb-6 bg-white border border-gray-200">
+        <h2 className="text-lg font-semibold mb-3 text-gray-900">Search for Candidates</h2>
         <div className="flex gap-3 mb-3">
           <input
             type="text"
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
             placeholder="Enter keywords (e.g., 'solidity developer')"
-            className="flex-1 rounded px-3 py-2 text-sm outline-none placeholder-gray-500"
-            style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text)" }}
+            className="flex-1 rounded px-3 py-2 text-sm outline-none border border-gray-200 bg-white text-gray-900 placeholder-gray-400 focus:border-[#2A72E5] focus:ring-1 focus:ring-[#2A72E5]"
             onKeyDown={(e) => e.key === "Enter" && runSearch(searchKeyword)}
           />
           <button
             onClick={() => runSearch(searchKeyword)}
             disabled={searching}
-            className="disabled:opacity-50 px-4 py-2 rounded text-sm font-medium text-white hover:brightness-110"
-            style={{ background: "var(--color-primary)" }}
+            className="disabled:opacity-50 px-4 py-2 rounded text-sm font-medium text-white bg-[#1C1C1C] hover:bg-gray-800"
           >
             {searching ? "Searching..." : "Search"}
           </button>
           <button
+            onClick={() => fetchCandidates()}
+            className="px-4 py-2 rounded text-sm font-medium border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+          >
+            🔄 Refresh
+          </button>
+        </div>
+
+        <div className="flex gap-3 mb-3">
+          <button
             onClick={() => runSearch()}
             disabled={searching}
-            className="disabled:opacity-50 px-4 py-2 rounded text-sm font-medium hover:brightness-110"
-            style={{ background: "var(--color-border)", color: "var(--color-text-secondary)" }}
+            className="disabled:opacity-50 px-4 py-2 rounded text-sm font-medium border border-[#2A72E5] text-[#2A72E5] bg-white hover:bg-blue-50"
           >
-            Run Default Queries
+            🚀 Run Full Search (all 18 keywords)
+          </button>
+          <button
+            onClick={runBridge}
+            disabled={bridging}
+            className="px-4 py-2 rounded text-sm font-medium border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+          >
+            {bridging ? "Bridging..." : "🔄 Find LinkedIn for GitHub candidates"}
           </button>
         </div>
 
@@ -153,31 +167,20 @@ export default function LinkedInPage() {
             <button
               key={kw}
               onClick={() => setSearchKeyword(kw)}
-              className="text-xs rounded-full px-3 py-1 hover:brightness-125 transition"
-              style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}
+              className="text-xs rounded-full px-3 py-1 border border-gray-200 text-gray-500 hover:border-[#2A72E5] hover:text-[#2A72E5] transition bg-gray-50"
             >
               {kw}
             </button>
           ))}
         </div>
 
-        {/* GitHub Bridge */}
-        <button
-          onClick={runBridge}
-          disabled={bridging}
-          className="text-xs rounded px-3 py-1.5 hover:brightness-125 transition"
-          style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}
-        >
-          {bridging ? "Bridging..." : "🔄 Find LinkedIn for GitHub candidates"}
-        </button>
-
         {/* Search result */}
         {searchResult && (
-          <div className="mt-3 text-sm p-3 rounded" style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)" }}>
+          <div className={`mt-3 text-sm p-3 rounded border ${searchResult.error ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
             {searchResult.error ? (
-              <span className="text-red-400">❌ {searchResult.error}</span>
+              <span className="text-red-600">❌ {searchResult.error}</span>
             ) : (
-              <span className="text-green-400">
+              <span className="text-green-700">
                 ✅ Found {searchResult.total_found} candidates, {searchResult.total_saved} new saved
                 ({searchResult.search_method})
               </span>
@@ -186,36 +189,35 @@ export default function LinkedInPage() {
         )}
       </div>
 
-      {/* Filter */}
+      {/* Filter + Count */}
       <div className="flex items-center gap-3 mb-4">
-        <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Filter:</span>
+        <span className="text-sm text-gray-500">Filter:</span>
         {STATUS_OPTIONS.map((opt) => (
           <button
             key={opt.value}
             onClick={() => setStatusFilter(opt.value)}
-            className="text-xs px-3 py-1 rounded-full transition"
-            style={
+            className={`text-xs px-3 py-1 rounded-full transition border ${
               statusFilter === opt.value
-                ? { background: "var(--color-primary)", borderColor: "var(--color-primary)", color: "white", border: "1px solid var(--color-primary)" }
-                : { background: "var(--color-card)", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }
-            }
+                ? 'bg-[#1C1C1C] border-[#1C1C1C] text-white'
+                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'
+            }`}
           >
             {opt.label}
           </button>
         ))}
-        <span className="text-xs ml-auto" style={{ color: "var(--color-text-muted)" }}>{candidates.length} candidates</span>
+        <span className="text-sm font-semibold ml-auto text-gray-700">📊 {candidates.length} candidates</span>
       </div>
 
       {/* Candidates Table */}
       {loading ? (
-        <p style={{ color: "var(--color-text-muted)" }}>Loading...</p>
+        <p className="text-gray-400">Loading...</p>
       ) : candidates.length === 0 ? (
-        <p style={{ color: "var(--color-text-muted)" }}>No candidates found. Run a search to discover candidates.</p>
+        <p className="text-gray-400">No candidates found. Run a search to discover candidates.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg" style={{ border: "1px solid var(--color-border)" }}>
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)", background: "var(--color-card)" }}>
+              <tr className="text-left text-gray-500 border-b border-gray-200 bg-gray-50">
                 <th className="py-3 px-4">Name</th>
                 <th className="py-3 px-4">Headline</th>
                 <th className="py-3 px-4">Location</th>
@@ -227,60 +229,57 @@ export default function LinkedInPage() {
             </thead>
             <tbody>
               {candidates.map((c) => (
-                <tr key={c.id} className="hover:brightness-125 transition" style={{ borderBottom: "1px solid var(--color-border)", background: "rgba(26, 27, 46, 0.5)" }}>
+                <tr key={c.id} className="hover:bg-gray-50 transition border-b border-gray-200">
                   <td className="py-2.5 px-4">
                     <a
                       href={c.profile_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-medium hover:underline"
-                      style={{ color: "var(--color-primary)" }}
+                      className="font-medium text-[#2A72E5] hover:underline"
                     >
                       {c.full_name}
                     </a>
                     {c.source === "github_bridge" && (
-                      <span className="ml-1 text-[10px] bg-purple-900/50 text-purple-300 px-1.5 rounded">
+                      <span className="ml-1 text-[10px] bg-purple-100 text-purple-700 px-1.5 rounded">
                         GitHub
                       </span>
                     )}
                   </td>
-                  <td className="py-2.5 px-4 max-w-xs truncate" style={{ color: "var(--color-text-secondary)" }}>{c.headline}</td>
-                  <td className="py-2.5 px-4 text-xs" style={{ color: "var(--color-text-muted)" }}>{c.location}</td>
+                  <td className="py-2.5 px-4 max-w-xs truncate text-gray-500">{c.headline}</td>
+                  <td className="py-2.5 px-4 text-xs text-gray-400">{c.location}</td>
                   <td className="py-2.5 px-4 text-center">
                     <span
                       className={`font-mono text-xs px-2 py-0.5 rounded ${
                         c.score >= 8
-                          ? "bg-green-900/50 text-green-300"
+                          ? "bg-green-100 text-green-700"
                           : c.score >= 6
-                          ? "bg-yellow-900/50 text-yellow-300"
-                          : "text-gray-400"
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-gray-100 text-gray-500"
                       }`}
-                      style={c.score < 6 ? { background: "var(--color-card)" } : {}}
                     >
                       {c.score?.toFixed(1)}
                     </span>
                   </td>
                   <td className="py-2.5 px-4 text-center">
                     {c.open_to_work ? (
-                      <span className="text-green-400 text-xs">🟢</span>
+                      <span className="text-green-600 text-xs">🟢</span>
                     ) : (
-                      <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>—</span>
+                      <span className="text-xs text-gray-400">—</span>
                     )}
                   </td>
                   <td className="py-2.5 px-4">
                     <span
                       className={`text-xs px-2 py-0.5 rounded ${
                         c.status === "outreach"
-                          ? "bg-blue-900/50 text-blue-300"
+                          ? "bg-blue-100 text-blue-700"
                           : c.status === "contacted"
-                          ? "bg-yellow-900/50 text-yellow-300"
+                          ? "bg-yellow-100 text-yellow-700"
                           : c.status === "responded"
-                          ? "bg-green-900/50 text-green-300"
+                          ? "bg-green-100 text-green-700"
                           : c.status === "rejected"
-                          ? "bg-red-900/50 text-red-300"
-                          : "text-gray-400"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-gray-100 text-gray-500"
                       }`}
-                      style={c.status === "discovered" ? { background: "var(--color-card)" } : {}}
                     >
                       {c.status}
                     </span>
@@ -290,7 +289,7 @@ export default function LinkedInPage() {
                       {c.status === "discovered" && (
                         <button
                           onClick={() => markOutreach(c.id, "outreach")}
-                          className="text-[10px] bg-blue-800 hover:bg-blue-700 px-2 py-0.5 rounded text-white"
+                          className="text-[10px] bg-[#2A72E5] hover:bg-[#1E5FCC] px-2 py-0.5 rounded text-white"
                         >
                           Mark Outreach
                         </button>
@@ -298,7 +297,7 @@ export default function LinkedInPage() {
                       {c.status === "outreach" && (
                         <button
                           onClick={() => markOutreach(c.id, "contacted")}
-                          className="text-[10px] bg-yellow-800 hover:bg-yellow-700 px-2 py-0.5 rounded text-white"
+                          className="text-[10px] bg-yellow-500 hover:bg-yellow-600 px-2 py-0.5 rounded text-white"
                         >
                           Contacted
                         </button>
@@ -306,8 +305,7 @@ export default function LinkedInPage() {
                       {c.status !== "rejected" && (
                         <button
                           onClick={() => markOutreach(c.id, "rejected")}
-                          className="text-[10px] px-2 py-0.5 rounded hover:text-red-400 transition"
-                          style={{ background: "var(--color-card)", color: "var(--color-text-muted)" }}
+                          className="text-[10px] px-2 py-0.5 rounded text-gray-400 hover:text-red-500 bg-gray-100 hover:bg-red-50 transition"
                         >
                           ✕
                         </button>

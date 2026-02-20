@@ -29,31 +29,31 @@ export default function CandidatesPage() {
   };
 
   const recColor: Record<string, string> = {
-    "Strong Hire": "text-green-400", "Hire": "text-emerald-400", "Maybe": "text-yellow-400", "Pass": "text-red-400"
+    "Strong Hire": "text-green-700", "Hire": "text-emerald-600", "Maybe": "text-yellow-600", "Pass": "text-red-600"
   };
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Candidates</h1>
-      {loading ? <p style={{ color: "var(--color-text-muted)" }}>Loading...</p> : candidates.length === 0 ? (
-        <p style={{ color: "var(--color-text-muted)" }}>No candidates yet. <a href="/submit" style={{ color: "var(--color-primary)" }} className="underline">Submit one</a>.</p>
+      <h1 className="text-2xl font-bold mb-6 text-gray-900">Candidates</h1>
+      {loading ? <p className="text-gray-400">Loading...</p> : candidates.length === 0 ? (
+        <p className="text-gray-400">No candidates yet. <a href="/submit" className="text-[#2A72E5] underline">Submit one</a>.</p>
       ) : (
-        <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+        <div className="rounded-lg overflow-hidden border border-gray-200">
           <table className="w-full text-sm">
-            <thead><tr className="text-left" style={{ color: "var(--color-text-secondary)", borderBottom: "1px solid var(--color-border)", background: "var(--color-card)" }}>
+            <thead><tr className="text-left text-gray-500 border-b border-gray-200 bg-gray-50">
               <th className="py-3 px-4">Name</th><th className="py-3 px-4">Email</th><th className="py-3 px-4">Status</th><th className="py-3 px-4">Avg Score</th><th className="py-3 px-4">Recommendation</th><th className="py-3 px-4">Actions</th>
             </tr></thead>
             <tbody>
               {candidates.map(c => (
-                <tr key={c.id} className="hover:brightness-125 transition" style={{ borderBottom: "1px solid var(--color-border)", background: "rgba(26, 27, 46, 0.5)" }}>
-                  <td className="py-3 px-4"><a href={`/candidates/${c.id}`} style={{ color: "var(--color-primary)" }} className="hover:underline">{c.name}</a></td>
-                  <td className="py-3 px-4" style={{ color: "var(--color-text-secondary)" }}>{c.email}</td>
-                  <td className="py-3 px-4"><span className={`px-2 py-0.5 rounded text-xs ${c.status === 'analyzed' ? 'bg-green-900/50 text-green-400' : 'text-gray-400'}`} style={c.status !== 'analyzed' ? { background: "var(--color-card)", border: "1px solid var(--color-border)" } : {}}>{c.status}</span></td>
+                <tr key={c.id} className="hover:bg-gray-50 transition border-b border-gray-200">
+                  <td className="py-3 px-4"><a href={`/candidates/${c.id}`} className="text-[#2A72E5] hover:underline">{c.name}</a></td>
+                  <td className="py-3 px-4 text-gray-500">{c.email}</td>
+                  <td className="py-3 px-4"><span className={`px-2 py-0.5 rounded text-xs ${c.status === 'analyzed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{c.status}</span></td>
                   <td className="py-3 px-4">{avgScore(c.scores)}</td>
-                  <td className={`py-3 px-4 ${recColor[c.recommendation || ""] || ""}`}>{c.recommendation || "-"}</td>
+                  <td className={`py-3 px-4 font-medium ${recColor[c.recommendation || ""] || ""}`}>{c.recommendation || "-"}</td>
                   <td className="py-3 px-4">
-                    {c.status === "submitted" && <button onClick={() => triggerAnalysis(c.id)} className="text-xs px-3 py-1 rounded font-medium text-white hover:brightness-110" style={{ background: "var(--color-primary)" }}>Analyze</button>}
-                    {c.status === "analyzed" && <a href={`/candidates/${c.id}`} style={{ color: "var(--color-primary)" }} className="text-xs hover:underline">View</a>}
+                    {c.status === "submitted" && <button onClick={() => triggerAnalysis(c.id)} className="text-xs px-3 py-1 rounded font-medium text-white bg-[#1C1C1C] hover:bg-gray-800">Analyze</button>}
+                    {c.status === "analyzed" && <a href={`/candidates/${c.id}`} className="text-[#2A72E5] text-xs hover:underline">View</a>}
                   </td>
                 </tr>
               ))}

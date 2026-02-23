@@ -549,9 +549,8 @@ async def _find_linkedin_for_monitor_candidate(username: str, db) -> Optional[st
     location = user_data.get("location", "") or ""
     bio = user_data.get("bio", "") or ""
     blog = user_data.get("blog", "") or ""
-    twitter = user_data.get("twitter_username", "") or ""
 
-    # Check profile fields for LinkedIn URL
+    # 1. Check profile fields for LinkedIn URL
     for field in [blog, bio]:
         match = re.search(r'linkedin\.com/in/([a-zA-Z0-9_-]+)', field)
         if match:
@@ -559,6 +558,25 @@ async def _find_linkedin_for_monitor_candidate(username: str, db) -> Optional[st
             await db.execute("UPDATE monitor_candidates SET linkedin_url = ? WHERE github_username = ?", (url, username))
             await db.commit()
             return url
+
+    # 2. Check GitHub social accounts API
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                "https://api.github.com/users/{}/social_accounts".format(username),
+                headers=headers,
+            )
+            if resp.status_code == 200:
+                for account in resp.json():
+                    if "linkedin" in account.get("url", ""):
+                        url = account["url"]
+                        if not url.startswith("https://"):
+                            url = "https://" + url.lstrip("/")
+                        await db.execute("UPDATE monitor_candidates SET linkedin_url = ? WHERE github_username = ?", (url, username))
+                        await db.commit()
+                        return url
+    except Exception:
+        pass
 
     if not real_name:
         return None

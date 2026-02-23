@@ -94,6 +94,17 @@ async def init_db():
         last_profiled TEXT,
         is_active INTEGER DEFAULT 1
     );
+    CREATE TABLE IF NOT EXISTS outreach_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        candidate_id INTEGER NOT NULL,
+        candidate_type TEXT DEFAULT 'linkedin',
+        template_used TEXT,
+        message_sent TEXT,
+        channel TEXT DEFAULT 'linkedin_dm',
+        status TEXT DEFAULT 'sent',
+        sent_at TEXT DEFAULT (datetime('now')),
+        sent_by TEXT
+    );
     """)
 
     # Pre-populate users and team_skills

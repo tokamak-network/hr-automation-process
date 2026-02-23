@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
-// Dropdown categories with related keywords
 const KEYWORD_CATEGORIES: Record<string, string[]> = {
   "Core Blockchain": [
     "ethereum solidity developer",
@@ -29,7 +28,7 @@ const KEYWORD_CATEGORIES: Record<string, string[]> = {
     "dApp full-stack developer",
     "react typescript blockchain",
   ],
-  "Ecosystem": [
+  Ecosystem: [
     "tokamak network",
     "ethereum developer Korea Seoul",
     "blockchain developer open to work",
@@ -58,6 +57,246 @@ interface Candidate {
   created_at: string;
   source: string;
   notes: string;
+  search_keyword?: string;
+}
+
+interface OutreachTemplate {
+  id: string;
+  name: string;
+  language: string;
+  body: string;
+  variables: string[];
+}
+
+interface OutreachHistoryItem {
+  id: number;
+  candidate_id: number;
+  template_used: string;
+  message_sent: string;
+  channel: string;
+  status: string;
+  sent_at: string;
+  sent_by: string;
+}
+
+function OutreachModal({
+  candidate,
+  templates,
+  onClose,
+  onSent,
+}: {
+  candidate: Candidate;
+  templates: OutreachTemplate[];
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const [lang, setLang] = useState<"en" | "kr">("en");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [message, setMessage] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const filteredTemplates = templates.filter((t) => t.language === lang);
+
+  const fillVariables = useCallback(
+    (body: string) => {
+      return body
+        .replace(/\{name\}/g, candidate.full_name || "")
+        .replace(
+          /\{project\/skill\}/g,
+          candidate.headline || candidate.search_keyword || ""
+        )
+        .replace(
+          /\{skill_area\}/g,
+          candidate.headline || candidate.search_keyword || ""
+        )
+        .replace(/\{skill\}/g, candidate.headline || candidate.search_keyword || "")
+        .replace(/\{source\}/g, "LinkedIn")
+        .replace(/\{source:[^}]*\}/g, "LinkedIn")
+        .replace(/\{sender_name\}/g, "Junwoong")
+        .replace(/\{sender_title\}/g, "Tokamak Network")
+        .replace(/\{repo_name\}/g, "")
+        .replace(/\{action\}/g, "")
+        .replace(/\{action:[^}]*\}/g, "")
+        .replace(/\{link_to_track_b_info\}/g, "https://tokamak.network")
+        .replace(/\{link\}/g, "https://tokamak.network");
+    },
+    [candidate]
+  );
+
+  useEffect(() => {
+    if (selectedTemplateId) {
+      const t = templates.find((t) => t.id === selectedTemplateId);
+      if (t) setMessage(fillVariables(t.body));
+    }
+  }, [selectedTemplateId, templates, fillVariables]);
+
+  // Auto-select first template
+  useEffect(() => {
+    if (filteredTemplates.length > 0 && !selectedTemplateId) {
+      setSelectedTemplateId(filteredTemplates[0].id);
+    }
+  }, [filteredTemplates, selectedTemplateId]);
+
+  // When language changes, switch to equivalent template
+  useEffect(() => {
+    if (selectedTemplateId) {
+      const currentNum = selectedTemplateId.split("_")[0];
+      const newId = currentNum + "_" + lang;
+      const exists = templates.find((t) => t.id === newId);
+      if (exists) {
+        setSelectedTemplateId(newId);
+      } else if (filteredTemplates.length > 0) {
+        setSelectedTemplateId(filteredTemplates[0].id);
+      }
+    }
+  }, [lang]);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(message);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleMarkSent = async () => {
+    setSending(true);
+    try {
+      await fetch(`${API}/api/linkedin/candidates/${candidate.id}/outreach`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "contacted",
+          template_id: selectedTemplateId,
+          message_sent: message,
+          channel: "linkedin_dm",
+        }),
+      });
+      onSent();
+    } catch (e) {
+      console.error("Failed to save outreach", e);
+    }
+    setSending(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                📨 Outreach to {candidate.full_name}
+              </h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {candidate.headline}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 text-xl font-bold"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          {/* Language Toggle + Template Selector */}
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <label className="block text-xs font-semibold text-gray-500 mb-1">
+                Template
+              </label>
+              <select
+                value={selectedTemplateId}
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none focus:border-[#2A72E5]"
+              >
+                {filteredTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">
+                Language
+              </label>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                <button
+                  onClick={() => setLang("en")}
+                  className={`px-3 py-2 text-sm font-medium transition ${
+                    lang === "en"
+                      ? "bg-[#1C1C1C] text-white"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  EN
+                </button>
+                <button
+                  onClick={() => setLang("kr")}
+                  className={`px-3 py-2 text-sm font-medium transition ${
+                    lang === "kr"
+                      ? "bg-[#1C1C1C] text-white"
+                      : "bg-white text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  KR
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Editable Message */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">
+              Message (editable)
+            </label>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={12}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none focus:border-[#2A72E5] font-mono leading-relaxed resize-y"
+            />
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition"
+            >
+              {copied ? "✅ Copied!" : "📋 Copy to Clipboard"}
+            </button>
+            <a
+              href={candidate.profile_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-medium border border-[#2A72E5] text-[#2A72E5] bg-white hover:bg-blue-50 transition"
+            >
+              🔗 Open LinkedIn Profile
+            </a>
+            <div className="flex-1" />
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-500 bg-white hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleMarkSent}
+              disabled={sending || !message.trim()}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition disabled:opacity-50"
+            >
+              {sending ? "Saving..." : "✅ Mark as Sent"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function LinkedInPage() {
@@ -79,6 +318,12 @@ export default function LinkedInPage() {
   const [bridging, setBridging] = useState(false);
   const [dropdownCategory, setDropdownCategory] = useState("");
 
+  // Outreach modal state
+  const [outreachCandidate, setOutreachCandidate] = useState<Candidate | null>(null);
+  const [outreachTemplates, setOutreachTemplates] = useState<OutreachTemplate[]>([]);
+  const [expandedCandidate, setExpandedCandidate] = useState<number | null>(null);
+  const [outreachHistory, setOutreachHistory] = useState<Record<number, OutreachHistoryItem[]>>({});
+
   const fetchCandidates = async () => {
     setLoading(true);
     try {
@@ -94,8 +339,31 @@ export default function LinkedInPage() {
     setLoading(false);
   };
 
+  const fetchTemplates = async () => {
+    try {
+      const res = await fetch(`${API}/api/templates/outreach`);
+      const data = await res.json();
+      setOutreachTemplates(data);
+    } catch (e) {
+      console.error("Failed to fetch templates", e);
+    }
+  };
+
+  const fetchOutreachHistory = async (candidateId: number) => {
+    try {
+      const res = await fetch(
+        `${API}/api/linkedin/candidates/${candidateId}/outreach-history`
+      );
+      const data = await res.json();
+      setOutreachHistory((prev) => ({ ...prev, [candidateId]: data }));
+    } catch (e) {
+      console.error("Failed to fetch outreach history", e);
+    }
+  };
+
   useEffect(() => {
     fetchCandidates();
+    fetchTemplates();
   }, [statusFilter]);
 
   const addKeyword = (kw: string) => {
@@ -106,7 +374,7 @@ export default function LinkedInPage() {
   };
 
   const removeKeyword = (kw: string) => {
-    setActiveKeywords(activeKeywords.filter(k => k !== kw));
+    setActiveKeywords(activeKeywords.filter((k) => k !== kw));
   };
 
   const handleAddCustom = () => {
@@ -190,12 +458,27 @@ export default function LinkedInPage() {
     }
   };
 
+  const openOutreachModal = (c: Candidate) => {
+    setOutreachCandidate(c);
+  };
+
+  const toggleExpanded = (id: number) => {
+    if (expandedCandidate === id) {
+      setExpandedCandidate(null);
+    } else {
+      setExpandedCandidate(id);
+      fetchOutreachHistory(id);
+    }
+  };
+
   const runBridge = async () => {
     setBridging(true);
     try {
       const res = await fetch(`${API}/api/linkedin/bridge`, { method: "POST" });
       const data = await res.json();
-      alert(`Bridge complete: ${data.linkedin_profiles_found || 0} profiles found from ${data.candidates_checked || 0} GitHub users`);
+      alert(
+        `Bridge complete: ${data.linkedin_profiles_found || 0} profiles found from ${data.candidates_checked || 0} GitHub users`
+      );
       fetchCandidates();
     } catch (e) {
       console.error("Bridge failed", e);
@@ -203,29 +486,42 @@ export default function LinkedInPage() {
     setBridging(false);
   };
 
-  // All keywords from all categories for the dropdown
-  const allDropdownKeywords = Object.entries(KEYWORD_CATEGORIES).flatMap(
-    ([cat, kws]) => kws.map(kw => ({ category: cat, keyword: kw }))
-  ).filter(item => !activeKeywords.includes(item.keyword));
-
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6 text-gray-900">🔗 LinkedIn Sourcing</h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-900">
+        🔗 LinkedIn Sourcing
+      </h1>
+
+      {/* Outreach Modal */}
+      {outreachCandidate && (
+        <OutreachModal
+          candidate={outreachCandidate}
+          templates={outreachTemplates}
+          onClose={() => setOutreachCandidate(null)}
+          onSent={() => {
+            setOutreachCandidate(null);
+            fetchCandidates();
+          }}
+        />
+      )}
 
       {/* Search Section */}
       <div className="rounded-lg p-6 mb-6 bg-white border border-gray-200">
-
         {/* Active Keywords */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-gray-700">Search Keywords ({activeKeywords.length})</h3>
+            <h3 className="text-sm font-semibold text-gray-700">
+              Search Keywords ({activeKeywords.length})
+            </h3>
             <div className="flex gap-2">
               <button
                 onClick={runAllActive}
                 disabled={searching || activeKeywords.length === 0}
                 className="disabled:opacity-50 px-3 py-1.5 rounded text-sm font-medium text-white bg-[#1C1C1C] hover:bg-gray-800"
               >
-                {searching ? `⏳ Searching ${activeKeywords.length} keywords...` : `🚀 Search All (${activeKeywords.length})`}
+                {searching
+                  ? `⏳ Searching ${activeKeywords.length} keywords...`
+                  : `🚀 Search All (${activeKeywords.length})`}
               </button>
               <button
                 onClick={() => fetchCandidates()}
@@ -252,14 +548,15 @@ export default function LinkedInPage() {
               </span>
             ))}
             {activeKeywords.length === 0 && (
-              <span className="text-xs text-gray-400">No keywords added. Add from dropdown or type custom.</span>
+              <span className="text-xs text-gray-400">
+                No keywords added. Add from dropdown or type custom.
+              </span>
             )}
           </div>
         </div>
 
         {/* Add Keywords */}
         <div className="flex gap-3 mb-3">
-          {/* Dropdown: Category-based */}
           <select
             onChange={handleDropdownAdd}
             defaultValue=""
@@ -268,14 +565,17 @@ export default function LinkedInPage() {
             <option value="">+ Add from list...</option>
             {Object.entries(KEYWORD_CATEGORIES).map(([cat, kws]) => (
               <optgroup key={cat} label={cat}>
-                {kws.filter(kw => !activeKeywords.includes(kw)).map(kw => (
-                  <option key={kw} value={kw}>{kw}</option>
-                ))}
+                {kws
+                  .filter((kw) => !activeKeywords.includes(kw))
+                  .map((kw) => (
+                    <option key={kw} value={kw}>
+                      {kw}
+                    </option>
+                  ))}
               </optgroup>
             ))}
           </select>
 
-          {/* Custom input */}
           <div className="flex flex-1 gap-2">
             <input
               type="text"
@@ -300,32 +600,37 @@ export default function LinkedInPage() {
           </div>
         </div>
 
-        {/* Single keyword search */}
         <div className="flex gap-3 mb-3">
           <button
             onClick={runBridge}
             disabled={bridging}
             className="px-3 py-1.5 rounded text-sm font-medium border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
           >
-            {bridging ? "Bridging..." : "🔄 Find LinkedIn for GitHub candidates"}
+            {bridging
+              ? "Bridging..."
+              : "🔄 Find LinkedIn for GitHub candidates"}
           </button>
         </div>
 
-        {/* Dedup notice */}
         <p className="text-xs text-gray-400 mb-2">
-          ℹ️ 동일 후보자는 최초 검색 후 <strong>30일 이내</strong> 재검색 시 중복으로 처리되어 건너뜁니다. 30일 이후에는 갱신됩니다.
+          ℹ️ 동일 후보자는 최초 검색 후 <strong>30일 이내</strong> 재검색 시
+          중복으로 처리되어 건너뜁니다. 30일 이후에는 갱신됩니다.
         </p>
 
-        {/* Search result */}
         {searchResult && (
-          <div className={`mt-3 text-sm p-3 rounded border ${searchResult.error ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+          <div
+            className={`mt-3 text-sm p-3 rounded border ${searchResult.error ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}`}
+          >
             {searchResult.error ? (
               <span className="text-red-600">❌ {searchResult.error}</span>
             ) : (
               <span className="text-green-700">
-                ✅ Found {searchResult.total_found} candidates, {searchResult.total_saved} new saved
-                {searchResult.keywords_searched ? ` (${searchResult.keywords_searched} keywords searched)` : ""}
-                {" "}({searchResult.search_method})
+                ✅ Found {searchResult.total_found} candidates,{" "}
+                {searchResult.total_saved} new saved
+                {searchResult.keywords_searched
+                  ? ` (${searchResult.keywords_searched} keywords searched)`
+                  : ""}{" "}
+                ({searchResult.search_method})
               </span>
             )}
           </div>
@@ -341,21 +646,25 @@ export default function LinkedInPage() {
             onClick={() => setStatusFilter(opt.value)}
             className={`text-xs px-3 py-1 rounded-full transition border ${
               statusFilter === opt.value
-                ? 'bg-[#1C1C1C] border-[#1C1C1C] text-white'
-                : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'
+                ? "bg-[#1C1C1C] border-[#1C1C1C] text-white"
+                : "bg-white border-gray-200 text-gray-500 hover:border-gray-400"
             }`}
           >
             {opt.label}
           </button>
         ))}
-        <span className="text-sm font-semibold ml-auto text-gray-700">📊 {candidates.length} candidates</span>
+        <span className="text-sm font-semibold ml-auto text-gray-700">
+          📊 {candidates.length} candidates
+        </span>
       </div>
 
       {/* Candidates Table */}
       {loading ? (
         <p className="text-gray-400">Loading...</p>
       ) : candidates.length === 0 ? (
-        <p className="text-gray-400">No candidates found. Run a search to discover candidates.</p>
+        <p className="text-gray-400">
+          No candidates found. Run a search to discover candidates.
+        </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-200">
           <table className="w-full text-sm">
@@ -372,90 +681,201 @@ export default function LinkedInPage() {
             </thead>
             <tbody>
               {candidates.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50 transition border-b border-gray-200">
-                  <td className="py-2.5 px-4">
-                    <a
-                      href={c.profile_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-[#2A72E5] hover:underline"
-                    >
-                      {c.full_name}
-                    </a>
-                    {(c.source === "github_bridge" || c.source === "github") && (
-                      <span className="ml-1 text-[10px] bg-purple-100 text-purple-700 px-1.5 rounded">
-                        GitHub
+                <>
+                  <tr
+                    key={c.id}
+                    className="hover:bg-gray-50 transition border-b border-gray-200 cursor-pointer"
+                    onClick={() => toggleExpanded(c.id)}
+                  >
+                    <td className="py-2.5 px-4">
+                      <a
+                        href={c.profile_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-[#2A72E5] hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {c.full_name}
+                      </a>
+                      {(c.source === "github_bridge" ||
+                        c.source === "github") && (
+                        <span className="ml-1 text-[10px] bg-purple-100 text-purple-700 px-1.5 rounded">
+                          GitHub
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-4 max-w-xs truncate text-gray-500">
+                      {c.headline}
+                    </td>
+                    <td className="py-2.5 px-4 text-xs text-gray-400">
+                      {c.location}
+                    </td>
+                    <td className="py-2.5 px-4 text-center">
+                      <span
+                        className={`font-mono text-xs px-2 py-0.5 rounded ${
+                          c.score >= 8
+                            ? "bg-green-100 text-green-700"
+                            : c.score >= 6
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-gray-100 text-gray-500"
+                        }`}
+                      >
+                        {c.score?.toFixed(1)}
                       </span>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-4 max-w-xs truncate text-gray-500">{c.headline}</td>
-                  <td className="py-2.5 px-4 text-xs text-gray-400">{c.location}</td>
-                  <td className="py-2.5 px-4 text-center">
-                    <span
-                      className={`font-mono text-xs px-2 py-0.5 rounded ${
-                        c.score >= 8
-                          ? "bg-green-100 text-green-700"
-                          : c.score >= 6
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-gray-100 text-gray-500"
-                      }`}
+                    </td>
+                    <td className="py-2.5 px-4 text-center">
+                      {c.open_to_work ? (
+                        <span className="text-green-600 text-xs">🟢</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-4">
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded ${
+                          c.status === "outreach"
+                            ? "bg-blue-100 text-blue-700"
+                            : c.status === "contacted"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : c.status === "responded"
+                                ? "bg-green-100 text-green-700"
+                                : c.status === "rejected"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-gray-100 text-gray-500"
+                        }`}
+                      >
+                        {c.status}
+                      </span>
+                    </td>
+                    <td
+                      className="py-2.5 px-4"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      {c.score?.toFixed(1)}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-4 text-center">
-                    {c.open_to_work ? (
-                      <span className="text-green-600 text-xs">🟢</span>
-                    ) : (
-                      <span className="text-xs text-gray-400">—</span>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-4">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded ${
-                        c.status === "outreach"
-                          ? "bg-blue-100 text-blue-700"
-                          : c.status === "contacted"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : c.status === "responded"
-                          ? "bg-green-100 text-green-700"
-                          : c.status === "rejected"
-                          ? "bg-red-100 text-red-700"
-                          : "bg-gray-100 text-gray-500"
-                      }`}
-                    >
-                      {c.status}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-4">
-                    <div className="flex gap-1">
-                      {c.status === "discovered" && (
-                        <button
-                          onClick={() => markOutreach(c.id, "outreach")}
-                          className="text-[10px] bg-[#2A72E5] hover:bg-[#1E5FCC] px-2 py-0.5 rounded text-white"
-                        >
-                          Mark Outreach
-                        </button>
-                      )}
-                      {c.status === "outreach" && (
-                        <button
-                          onClick={() => markOutreach(c.id, "contacted")}
-                          className="text-[10px] bg-yellow-500 hover:bg-yellow-600 px-2 py-0.5 rounded text-white"
-                        >
-                          Contacted
-                        </button>
-                      )}
-                      {c.status !== "rejected" && (
-                        <button
-                          onClick={() => markOutreach(c.id, "rejected")}
-                          className="text-[10px] px-2 py-0.5 rounded text-gray-400 hover:text-red-500 bg-gray-100 hover:bg-red-50 transition"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                      <div className="flex gap-1">
+                        {c.status === "discovered" && (
+                          <button
+                            onClick={() => openOutreachModal(c)}
+                            className="text-[10px] bg-[#2A72E5] hover:bg-[#1E5FCC] px-2 py-0.5 rounded text-white"
+                          >
+                            📨 Prepare Outreach
+                          </button>
+                        )}
+                        {c.status === "outreach" && (
+                          <>
+                            <button
+                              onClick={() => openOutreachModal(c)}
+                              className="text-[10px] bg-[#2A72E5] hover:bg-[#1E5FCC] px-2 py-0.5 rounded text-white"
+                            >
+                              📨 Send Message
+                            </button>
+                            <button
+                              onClick={() => markOutreach(c.id, "contacted")}
+                              className="text-[10px] bg-gray-200 hover:bg-gray-300 px-2 py-0.5 rounded text-gray-600"
+                            >
+                              Skip
+                            </button>
+                          </>
+                        )}
+                        {c.status === "contacted" && (
+                          <>
+                            <button
+                              onClick={() => markOutreach(c.id, "responded")}
+                              className="text-[10px] bg-green-500 hover:bg-green-600 px-2 py-0.5 rounded text-white"
+                            >
+                              ✅ Responded
+                            </button>
+                            <button
+                              onClick={() => markOutreach(c.id, "rejected")}
+                              className="text-[10px] bg-gray-200 hover:bg-gray-300 px-2 py-0.5 rounded text-gray-600"
+                            >
+                              ❌ No Response
+                            </button>
+                          </>
+                        )}
+                        {c.status === "responded" && (
+                          <button
+                            disabled
+                            className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-400 cursor-not-allowed"
+                          >
+                            🎯 Move to Candidate
+                          </button>
+                        )}
+                        {c.status !== "rejected" &&
+                          c.status !== "responded" &&
+                          c.status !== "contacted" && (
+                            <button
+                              onClick={() => markOutreach(c.id, "rejected")}
+                              className="text-[10px] px-2 py-0.5 rounded text-gray-400 hover:text-red-500 bg-gray-100 hover:bg-red-50 transition"
+                            >
+                              ✕
+                            </button>
+                          )}
+                      </div>
+                    </td>
+                  </tr>
+                  {/* Expanded row with outreach history */}
+                  {expandedCandidate === c.id && (
+                    <tr key={`${c.id}-expanded`}>
+                      <td colSpan={7} className="bg-gray-50 px-6 py-4">
+                        <div className="text-xs text-gray-600">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-semibold text-gray-700">
+                              📋 Outreach History
+                            </span>
+                            {c.notes && (
+                              <span className="text-gray-400">
+                                Notes: {c.notes}
+                              </span>
+                            )}
+                          </div>
+                          {outreachHistory[c.id] &&
+                          outreachHistory[c.id].length > 0 ? (
+                            <div className="space-y-2">
+                              {outreachHistory[c.id].map((h) => (
+                                <div
+                                  key={h.id}
+                                  className="bg-white rounded-lg border border-gray-200 p-3"
+                                >
+                                  <div className="flex items-center gap-3 mb-1">
+                                    <span className="font-medium text-gray-700">
+                                      {h.template_used || "Custom"}
+                                    </span>
+                                    <span className="text-gray-400">
+                                      via {h.channel}
+                                    </span>
+                                    <span className="text-gray-400">
+                                      {new Date(
+                                        h.sent_at + "Z"
+                                      ).toLocaleDateString()}
+                                    </span>
+                                    <span
+                                      className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                        h.status === "replied"
+                                          ? "bg-green-100 text-green-700"
+                                          : h.status === "no_response"
+                                            ? "bg-red-100 text-red-700"
+                                            : "bg-blue-100 text-blue-700"
+                                      }`}
+                                    >
+                                      {h.status}
+                                    </span>
+                                  </div>
+                                  <pre className="text-[11px] text-gray-500 whitespace-pre-wrap font-mono mt-1 max-h-32 overflow-y-auto">
+                                    {h.message_sent}
+                                  </pre>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-gray-400">
+                              No outreach messages sent yet.
+                            </p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
             </tbody>
           </table>

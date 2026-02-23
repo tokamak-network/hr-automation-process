@@ -509,15 +509,94 @@ async def linkedin_candidates(status: str = "", limit: int = 50, offset: int = 0
 class OutreachRequest(BaseModel):
     status: str = "outreach"
     notes: str = ""
+    template_id: str = ""
+    message_sent: str = ""
+    channel: str = "linkedin_dm"
+
+
+@app.get("/api/templates/outreach")
+async def get_outreach_templates():
+    """Parse outreach_templates.md and return structured JSON."""
+    import re
+    templates_path = os.path.join(os.path.dirname(__file__), "..", "templates", "outreach_templates.md")
+    if not os.path.exists(templates_path):
+        raise HTTPException(404, "Templates file not found")
+    with open(templates_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    templates = []
+    # Split by ## N. Title — produces ['preamble', '1', 'Title1', 'content1', '2', 'Title2', 'content2', ...]
+    sections = re.split(r'^## (\d+)\.\s+(.+)$', content, flags=re.MULTILINE)
+    i = 1
+    while i + 2 < len(sections):
+        tid = sections[i].strip()
+        name = sections[i + 1].strip()
+        rest = sections[i + 2]
+
+        # Parse English and Korean blocks
+        langs = {}
+        for lang_label, lang_key in [("### English", "en"), ("### 한국어", "kr")]:
+            if lang_label in rest:
+                after = rest.split(lang_label, 1)[1]
+                code_match = re.search(r'```\n?(.*?)```', after, re.DOTALL)
+                if code_match:
+                    langs[lang_key] = code_match.group(1).strip()
+
+        # If no language subsections, grab first code block as English
+        if not langs:
+            code_match = re.search(r'```\n?(.*?)```', rest, re.DOTALL)
+            if code_match:
+                langs["en"] = code_match.group(1).strip()
+
+        # Extract variables from template text
+        all_text = " ".join(langs.values())
+        variables = sorted(set(re.findall(r'\{([^}]+)\}', all_text)))
+
+        for lang_key, body in langs.items():
+            templates.append({
+                "id": "{}_{}".format(tid, lang_key),
+                "name": name,
+                "language": lang_key,
+                "body": body,
+                "variables": variables,
+            })
+
+        i += 3
+
+    return templates
 
 
 @app.post("/api/linkedin/candidates/{candidate_id}/outreach")
 async def linkedin_outreach(candidate_id: int, data: OutreachRequest):
-    """Mark candidate for outreach (status update)."""
+    """Mark candidate for outreach (status update) and optionally save outreach history."""
     success = update_linkedin_status(candidate_id, data.status, data.notes)
     if not success:
         raise HTTPException(404, "Candidate not found")
+
+    # Save to outreach_history if message was sent
+    if data.message_sent:
+        db = await get_db()
+        await db.execute(
+            "INSERT INTO outreach_history (candidate_id, candidate_type, template_used, message_sent, channel, status, sent_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (candidate_id, "linkedin", data.template_id, data.message_sent, data.channel, "sent", data.notes or "")
+        )
+        await db.commit()
+        await db.close()
+
     return {"id": candidate_id, "status": data.status}
+
+
+@app.get("/api/linkedin/candidates/{candidate_id}/outreach-history")
+async def get_outreach_history(candidate_id: int):
+    """Returns outreach history for a candidate."""
+    db = await get_db()
+    rows = await db.execute(
+        "SELECT * FROM outreach_history WHERE candidate_id = ? ORDER BY sent_at DESC",
+        (candidate_id,)
+    )
+    history = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return history
 
 
 # ── Monitor LinkedIn Lookup ───────────────────────────────────────────────

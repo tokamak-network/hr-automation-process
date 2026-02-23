@@ -1,5 +1,13 @@
 # Tokamak Hiring System
 
+[![Python](https://img.shields.io/badge/Python-3.9+-blue?logo=python)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?logo=fastapi)](https://fastapi.tiangolo.com)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Tokamak Network](https://img.shields.io/badge/Tokamak-Network-blue?logo=ethereum)](https://tokamak.network)
+
+**AI-powered recruitment automation for Ethereum L2 teams. No resumes — evaluate candidates by real deliverables (Track B).**
+
 AI 기반 채용 자동화 시스템. 이력서 대신 결과물(Track B)로 평가하고, 후보자를 자동으로 발굴합니다.
 
 ## 🎯 핵심 철학

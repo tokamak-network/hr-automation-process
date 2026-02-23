@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+title: "Tokamak Hiring System"
+message: "AI-powered recruitment automation for Ethereum L2 teams. Track B evaluation, GitHub monitoring, LinkedIn outbound sourcing."
+type: software
+authors:
+  - name: "Tokamak Network"
+    website: "https://tokamak.network"
+repository-code: "https://github.com/tokamak-network/hr-automation-process"
+keywords:
+  - hiring
+  - recruitment
+  - ats
+  - applicant-tracking-system
+  - ai-recruitment
+  - ethereum
+  - layer2
+  - blockchain
+  - web3
+  - github-monitor
+  - linkedin-sourcing
+  - candidate-evaluation
+  - outbound-recruiting
+  - track-b
+  - developer-hiring
+  - hr-automation
+  - fastapi
+  - nextjs
+  - python
+  - tokamak-network
+license: MIT

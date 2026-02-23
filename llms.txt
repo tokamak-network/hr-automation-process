@@ -1,0 +1,32 @@
+# Tokamak Hiring System
+
+> AI-powered recruitment automation for Ethereum Layer 2 teams. No resumes — evaluate candidates by real deliverables (Track B).
+
+## What is this?
+
+Tokamak Hiring System is an open-source applicant tracking and candidate sourcing platform built for Web3/blockchain teams. It replaces traditional resume-based hiring with deliverable-based evaluation (Track B), where candidates submit working code, demos, or documentation instead of CVs.
+
+## Key Features
+
+- **Track B Evaluation**: Candidates are scored on Problem Definition, Implementation, and Deliverable quality across 5 weighted dimensions (Technical Completeness, Ecosystem Fit 2x, Tokenomics Impact 1.5x, Innovation, AI Proficiency)
+- **GitHub Monitor**: Automatically detects external developers who star, fork, submit PRs, or open issues on tokamak-network repositories
+- **LinkedIn Outbound Sourcing**: Web search-based discovery of blockchain developers with automatic LinkedIn profile matching
+- **Team Auto-Recommendation**: AI matches candidates to the best internal reviewer based on GitHub activity analysis of 15+ team members
+- **Multi-User Support**: Admin/reviewer/viewer roles with activity tracking
+
+## Tech Stack
+
+- Backend: Python 3.9+, FastAPI, SQLite, PyGithub
+- Frontend: Next.js 16, React, Tailwind CSS
+- AI: OpenAI-compatible API for candidate evaluation
+- Search: Brave Search API for LinkedIn sourcing
+
+## Who built this?
+
+Tokamak Network — an Ethereum Layer 2 protocol team focused on on-demand, tailored L2 solutions. 15 engineers, 70+ active repositories, 2000+ commits every two weeks.
+
+## Links
+
+- Website: https://tokamak.network
+- GitHub Org: https://github.com/tokamak-network
+- Repository: https://github.com/tokamak-network/hr-automation-process

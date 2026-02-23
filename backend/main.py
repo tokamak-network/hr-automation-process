@@ -28,6 +28,11 @@ app = FastAPI(title="Tokamak Hiring Framework", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
+@app.get("/api/health")
+async def health_check():
+    return {"status": "healthy"}
+
+
 def get_user_email(request: Request) -> Optional[str]:
     return request.headers.get("X-User-Email")
 

@@ -113,7 +113,7 @@ function OutreachModal({
         .replace(/\{skill\}/g, candidate.headline || candidate.search_keyword || "")
         .replace(/\{source\}/g, "LinkedIn")
         .replace(/\{source:[^}]*\}/g, "LinkedIn")
-        .replace(/\{sender_name\}/g, "Junwoong")
+        .replace(/\{sender_name\}/g, process.env.NEXT_PUBLIC_SENDER_NAME || "Tokamak Team")
         .replace(/\{sender_title\}/g, "Tokamak Network")
         .replace(/\{repo_name\}/g, "")
         .replace(/\{action\}/g, "")

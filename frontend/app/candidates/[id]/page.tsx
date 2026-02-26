@@ -15,16 +15,38 @@ interface Reviewer {
   why?: string;
 }
 
+interface MatchResult {
+  github_username: string;
+  display_name: string;
+  match_score: number;
+  matched_skills: string[];
+  top_repos: { name: string; commits: number; language: string }[];
+}
+
+interface MatchData {
+  candidate: {
+    extracted_skills: Record<string, number>;
+  };
+  matches: MatchResult[];
+  recommended_reviewers: MatchResult[];
+}
+
 export default function CandidateDetail() {
   const { id } = useParams();
   const [candidate, setCandidate] = useState<any>(null);
   const [reviewers, setReviewers] = useState<Reviewer[]>([]);
+  const [matchData, setMatchData] = useState<MatchData | null>(null);
+  const [showAllMatches, setShowAllMatches] = useState(false);
 
   useEffect(() => {
     fetch(`${API}/api/candidates/${id}`).then(r => r.json()).then(setCandidate);
     fetch(`${API}/api/candidates/${id}/recommended-reviewers`)
       .then(r => r.json())
       .then(data => setReviewers(data.reviewers || []))
+      .catch(() => {});
+    fetch(`${API}/api/candidates/${id}/match`)
+      .then(r => r.json())
+      .then(setMatchData)
       .catch(() => {});
   }, [id]);
 
@@ -122,6 +144,89 @@ export default function CandidateDetail() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {matchData && (
+        <div className="mb-6 rounded-lg p-6 border border-gray-200 bg-white">
+          <h2 className="font-semibold mb-4 text-gray-900">🎯 Team Matching</h2>
+          
+          {/* Candidate Skills */}
+          <div className="mb-4">
+            <h3 className="text-sm text-gray-500 mb-2">Candidate Skills (auto-detected)</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(matchData.candidate.extracted_skills)
+                .sort(([,a], [,b]) => b - a)
+                .map(([skill, score]) => (
+                  <span key={skill} className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                    score >= 0.5 ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
+                  }`}>
+                    {skill} {Math.round(score * 100)}%
+                  </span>
+                ))}
+            </div>
+          </div>
+
+          {/* Top Matches */}
+          <div className="mb-3">
+            <h3 className="text-sm text-gray-500 mb-2">Recommended Reviewers</h3>
+          </div>
+          <div className="space-y-3">
+            {(showAllMatches ? matchData.matches.filter(m => m.match_score > 0) : matchData.recommended_reviewers).map((m, i) => (
+              <div key={m.github_username} className={`flex items-center gap-4 p-3 rounded-lg border ${
+                i === 0 ? "border-blue-200 bg-blue-50" : "border-gray-200 bg-gray-50"
+              }`}>
+                {/* Rank */}
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+                  i === 0 ? "bg-blue-500 text-white" : i === 1 ? "bg-gray-300 text-gray-700" : "bg-gray-200 text-gray-500"
+                }`}>
+                  {i + 1}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <a href={`https://github.com/${m.github_username}`} target="_blank" rel="noopener noreferrer"
+                      className="font-medium text-[#2A72E5] hover:underline">
+                      {m.display_name}
+                    </a>
+                    <span className="text-xs text-gray-400">@{m.github_username}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {m.matched_skills.map(s => (
+                      <span key={s} className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                  {m.top_repos.length > 0 && (
+                    <div className="text-[10px] text-gray-400 mt-1 truncate">
+                      {m.top_repos.map(r => r.name).join(" · ")}
+                    </div>
+                  )}
+                </div>
+
+                {/* Match Score */}
+                <div className="text-right shrink-0">
+                  <div className={`text-lg font-bold ${
+                    m.match_score >= 10 ? "text-green-600" : m.match_score >= 5 ? "text-yellow-600" : "text-gray-400"
+                  }`}>
+                    {m.match_score}%
+                  </div>
+                  <div className="text-[10px] text-gray-400">match</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {matchData.matches.filter(m => m.match_score > 0).length > 3 && (
+            <button
+              onClick={() => setShowAllMatches(!showAllMatches)}
+              className="mt-3 text-xs text-[#2A72E5] hover:underline"
+            >
+              {showAllMatches ? "Show top 3 only" : `Show all ${matchData.matches.filter(m => m.match_score > 0).length} matches`}
+            </button>
+          )}
         </div>
       )}
 

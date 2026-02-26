@@ -315,6 +315,7 @@ export default function LinkedInPage() {
   ]);
   const [statusFilter, setStatusFilter] = useState("");
   const [searchResult, setSearchResult] = useState<any>(null);
+  const [newCandidateIds, setNewCandidateIds] = useState<Set<number>>(new Set());
   const [bridging, setBridging] = useState(false);
   const [dropdownCategory, setDropdownCategory] = useState("");
 
@@ -395,6 +396,8 @@ export default function LinkedInPage() {
   const runSearch = async (keywords?: string) => {
     setSearching(true);
     setSearchResult(null);
+    // Remember existing candidate IDs before search
+    const existingIds = new Set(candidates.map((c) => c.id));
     try {
       const body: any = {};
       if (keywords) body.keywords = keywords;
@@ -405,7 +408,15 @@ export default function LinkedInPage() {
       });
       const data = await res.json();
       setSearchResult(data);
-      fetchCandidates();
+      // Fetch updated candidates and detect new ones
+      const params = new URLSearchParams();
+      if (statusFilter) params.set("status", statusFilter);
+      params.set("limit", "100");
+      const cRes = await fetch(`${API}/api/linkedin/candidates?${params}`);
+      const updatedCandidates: Candidate[] = await cRes.json();
+      setCandidates(updatedCandidates);
+      const newIds = new Set(updatedCandidates.filter((c) => !existingIds.has(c.id)).map((c) => c.id));
+      setNewCandidateIds(newIds);
     } catch (e) {
       console.error("Search failed", e);
       setSearchResult({ error: "Search failed" });
@@ -417,6 +428,8 @@ export default function LinkedInPage() {
     if (activeKeywords.length === 0) return;
     setSearching(true);
     setSearchResult(null);
+    // Remember existing candidate IDs before search
+    const existingIds = new Set(candidates.map((c) => c.id));
     let totalFound = 0;
     let totalSaved = 0;
     let method = "";
@@ -441,7 +454,15 @@ export default function LinkedInPage() {
       search_method: method,
       keywords_searched: activeKeywords.length,
     });
-    fetchCandidates();
+    // Fetch updated candidates and detect new ones
+    const params = new URLSearchParams();
+    if (statusFilter) params.set("status", statusFilter);
+    params.set("limit", "100");
+    const cRes = await fetch(`${API}/api/linkedin/candidates?${params}`);
+    const updatedCandidates: Candidate[] = await cRes.json();
+    setCandidates(updatedCandidates);
+    const newIds = new Set(updatedCandidates.filter((c) => !existingIds.has(c.id)).map((c) => c.id));
+    setNewCandidateIds(newIds);
     setSearching(false);
   };
 
@@ -489,7 +510,7 @@ export default function LinkedInPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6 text-gray-900">
-        🔗 LinkedIn Sourcing
+        🔍 Developer Sourcing
       </h1>
 
       {/* Outreach Modal */}
@@ -643,7 +664,7 @@ export default function LinkedInPage() {
         {STATUS_OPTIONS.map((opt) => (
           <button
             key={opt.value}
-            onClick={() => setStatusFilter(opt.value)}
+            onClick={() => { setStatusFilter(opt.value); setNewCandidateIds(new Set()); }}
             className={`text-xs px-3 py-1 rounded-full transition border ${
               statusFilter === opt.value
                 ? "bg-[#1C1C1C] border-[#1C1C1C] text-white"
@@ -697,6 +718,11 @@ export default function LinkedInPage() {
                       >
                         {c.full_name}
                       </a>
+                      {newCandidateIds.has(c.id) && (
+                        <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 rounded font-semibold">
+                          New
+                        </span>
+                      )}
                       {(c.source === "github_bridge" ||
                         c.source === "github") && (
                         <span className="ml-1 text-[10px] bg-purple-100 text-purple-700 px-1.5 rounded">

@@ -275,6 +275,7 @@ async def search_linkedin_candidates(
 
     total_found = 0
     total_saved = 0
+    saved_ids = []
     candidates_list = []
 
     for query in queries:
@@ -296,12 +297,22 @@ async def search_linkedin_candidates(
             saved = save_candidate(candidate, score, source="search")
             if saved:
                 total_saved += 1
+                # Retrieve the saved candidate's ID
+                conn = sqlite3.connect(DB_PATH)
+                row = conn.execute(
+                    "SELECT id FROM linkedin_candidates WHERE linkedin_username = ?",
+                    (candidate["linkedin_username"],)
+                ).fetchone()
+                conn.close()
+                if row:
+                    saved_ids.append(row[0])
 
             candidates_list.append(candidate)
 
     return {
         "total_found": total_found,
         "total_saved": total_saved,
+        "saved_ids": saved_ids,
         "candidates": candidates_list,
         "search_method": "brave" if BRAVE_API_KEY else "duckduckgo_fallback",
     }

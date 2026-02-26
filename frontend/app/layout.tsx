@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 const navLinks = [
   { href: "/submit", label: "Submit" },
   { href: "/monitor", label: "Monitor" },
-  { href: "/linkedin", label: "LinkedIn" },
+  { href: "/linkedin", label: "Developer Sourcing" },
   { href: "/team", label: "Team" },
 ];
 

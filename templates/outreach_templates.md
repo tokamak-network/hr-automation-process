@@ -6,15 +6,27 @@
 ```
 Hi {name},
 
-I came across your work on {project/skill} and was really impressed. I'm with Tokamak Network, an Ethereum L2 protocol team.
+I'm {sender_name} from Tokamak Network, an Ethereum Layer 2 protocol team.
 
-We're looking for talented developers who can contribute to our ecosystem — and we do hiring differently. No resumes, no leetcode puzzles. Instead, we evaluate candidates based on actual deliverables (we call it "Track B").
+I came across your profile and work, and thought you might be a great fit for what we're building.
 
-You'd build something for the Tokamak ecosystem, we'd review your work, and if it's a fit, we move fast.
+At Tokamak, we leverage AI tooling to maintain high development productivity — our team ships millions of code changes across 67+ projects every two weeks. We're looking for developers who are passionate about blockchain and can thrive in that kind of environment.
 
-Would you be open to learning more?
+Our hiring process reflects that philosophy: no resumes, no interviews — just real deliverables.
 
-Best,
+So here's our application process:
+
+1. Take a look at our GitHub (https://github.com/tokamak-network) and website (https://tokamak.network)
+2. Get familiar with what we're building — Layer 2, ZK, DeFi, AI tooling, and more
+3. Build something. It could be an improvement to an existing project, a new tool, or anything that shows you understand our ecosystem
+4. Send your repo to jaden@tokamak.network and hr@tokamak.network
+
+No formal application needed — your code is your application.
+
+We're looking for great people to work with through this process, and we hope this new approach benefits both sides.
+
+Thank you🙏
+
 {sender_name}
 Tokamak Network
 ```
@@ -23,13 +35,25 @@ Tokamak Network
 ```
 안녕하세요 {name}님,
 
-{project/skill} 관련 작업을 보고 연락드립니다. 저는 이더리움 L2 프로토콜 Tokamak Network 팀입니다.
+Tokamak Network의 {sender_name}입니다. 이더리움 Layer 2 프로토콜 팀입니다.
 
-저희는 채용 방식이 좀 다릅니다. 이력서나 알고리즘 테스트 없이, 실제 결과물(Track B)로 평가합니다. 토카막 생태계에 기여할 수 있는 프로젝트를 만들어 제출하면, 팀이 직접 리뷰합니다.
+당신의 이력 및 관련 작업을 보고 연락드립니다.
 
-관심 있으시면 자세한 내용 안내드리겠습니다.
+저희 팀은 AI 툴링을 적극 활용해 높은 개발 생산성을 유지하고 있으며, 2주마다 67개 이상의 프로젝트에서 수백만 줄의 코드 변경을 진행하고 있습니다. 블록체인에 관심이 있고, 이런 환경에서 함께 성장할 개발자를 찾고 있습니다.
 
-감사합니다,
+저희 채용 방식은 이력서나 면접 없이, 실제 결과물로만 평가합니다.
+
+지원 절차는 다음과 같습니다:
+
+1. GitHub (https://github.com/tokamak-network) 과 웹사이트 (https://tokamak.network) 를 확인해주세요
+2. 저희가 만들고 있는 것들을 살펴보세요 — Layer 2, ZK, DeFi, AI 툴링 등
+3. 무언가를 만들어 주세요. 기존 프로젝트 개선, 새로운 툴, 생태계에 대한 이해를 보여줄 수 있는 어떤 것이든 좋습니다
+4. 완성된 레포를 jaden@tokamak.network 과 hr@tokamak.network 로 보내주세요
+
+별도의 지원서는 필요 없습니다 — 코드가 곧 지원서입니다.
+
+감사합니다🙏
+
 {sender_name}
 Tokamak Network
 ```

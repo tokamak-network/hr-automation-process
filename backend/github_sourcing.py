@@ -9,6 +9,7 @@ import re
 import json
 import sqlite3
 import time
+import requests
 from datetime import datetime
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
@@ -177,6 +178,7 @@ async def search_github_developers(
     
     total_found = 0
     total_saved = 0
+    saved_ids = []
     candidates_list = []
     
     # Track known team members to exclude
@@ -192,11 +194,29 @@ async def search_github_developers(
                 if user.login in TEAM_MEMBERS:
                     continue
                 
-                # Check for LinkedIn in bio/blog
+                # Check for LinkedIn in bio/blog/social accounts
                 blog = user.blog or ""
                 bio = user.bio or ""
                 combined = blog + " " + bio
                 linkedin_match = re.search(r'linkedin\.com/in/([a-zA-Z0-9_-]+)', combined)
+                
+                # If not found in bio/blog, check GitHub social accounts API
+                if not linkedin_match:
+                    try:
+                        headers = {"Authorization": f"token {os.environ.get('GITHUB_TOKEN', '')}"}
+                        social_resp = requests.get(
+                            f"https://api.github.com/users/{user.login}/social_accounts",
+                            headers=headers, timeout=10
+                        )
+                        if social_resp.status_code == 200:
+                            for acct in social_resp.json():
+                                if acct.get("provider") == "linkedin" or "linkedin.com/in/" in (acct.get("url") or ""):
+                                    lm = re.search(r'linkedin\.com/in/([a-zA-Z0-9_-]+)', acct["url"])
+                                    if lm:
+                                        linkedin_match = lm
+                                        break
+                    except Exception:
+                        pass
                 
                 user_data = {
                     "login": user.login,
@@ -217,6 +237,17 @@ async def search_github_developers(
                 saved = save_github_candidate(user_data, score, query)
                 if saved:
                     total_saved += 1
+                    # Retrieve saved candidate ID using same db_username logic
+                    linkedin_un = user_data.get("linkedin_username", "")
+                    db_un = linkedin_un if linkedin_un else f"gh_{user.login}"
+                    conn2 = sqlite3.connect(DB_PATH)
+                    row = conn2.execute(
+                        "SELECT id FROM linkedin_candidates WHERE linkedin_username = ?",
+                        (db_un,)
+                    ).fetchone()
+                    conn2.close()
+                    if row:
+                        saved_ids.append(row[0])
                 
                 candidates_list.append({
                     "github": user.login,
@@ -238,6 +269,7 @@ async def search_github_developers(
     return {
         "total_found": total_found,
         "total_saved": total_saved,
+        "saved_ids": saved_ids,
         "candidates": candidates_list,
         "search_method": "github_api",
         "queries_searched": len(queries),

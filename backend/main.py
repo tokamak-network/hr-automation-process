@@ -11,12 +11,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from database import init_db, get_db
+import sqlite3
+from database import init_db, get_db, DB_PATH
 from analyzer import analyze_repo, ai_analyze, analyze_github_profile, TEAM_MEMBERS, recommend_reviewers, calculate_weighted_score
 from team_profiler import scan_org_profiles
 from linkedin_google import search_linkedin_candidates, get_linkedin_candidates, update_candidate_status as update_linkedin_status, init_linkedin_db
 from github_linkedin import bridge_github_candidates
 from github_sourcing import search_github_developers
+from matching import match_candidate_to_team
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -481,11 +483,18 @@ async def linkedin_search(data: LinkedInSearchRequest):
     )
     # If web search found nothing, fall back to GitHub API search
     if result.get("total_found", 0) == 0:
-        github_result = await search_github_developers(
+        result = await search_github_developers(
             keywords=data.keywords or None,
             max_per_query=15,
         )
-        return github_result
+    # Always attach saved_ids from DB if candidates were saved
+    if result.get("total_saved", 0) > 0:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute(
+            "SELECT id FROM linkedin_candidates WHERE created_at >= datetime('now', '-2 minutes') ORDER BY id DESC"
+        ).fetchall()
+        conn.close()
+        result["saved_ids"] = [r[0] for r in rows]
     return result
 
 
@@ -717,6 +726,15 @@ async def monitor_find_linkedin_single(username: str):
 async def linkedin_bridge():
     """Find LinkedIn profiles for GitHub monitor candidates."""
     result = await bridge_github_candidates()
+    return result
+
+
+@app.get("/api/candidates/{candidate_id}/match")
+async def get_candidate_match(candidate_id: int):
+    """Get team matching scores for a candidate."""
+    result = match_candidate_to_team(candidate_id)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
     return result
 
 

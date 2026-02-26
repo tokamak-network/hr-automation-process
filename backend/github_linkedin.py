@@ -167,7 +167,34 @@ async def bridge_github_candidates() -> Dict:
         if not real_name:
             continue
 
-        result = await find_linkedin_for_github_user(real_name, location, bio)
+        # First check GitHub social accounts for LinkedIn
+        result = None
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                token = os.getenv("GITHUB_TOKEN", "")
+                headers = {"Authorization": f"token {token}"} if token else {}
+                social_resp = await client.get(
+                    f"https://api.github.com/users/{username}/social_accounts",
+                    headers=headers,
+                )
+                if social_resp.status_code == 200:
+                    for acct in social_resp.json():
+                        if acct.get("provider") == "linkedin" or "linkedin.com/in/" in (acct.get("url") or ""):
+                            lm = re.search(r'linkedin\.com/in/([a-zA-Z0-9_-]+)', acct["url"])
+                            if lm:
+                                result = {
+                                    "linkedin_username": lm.group(1),
+                                    "profile_url": f"https://www.linkedin.com/in/{lm.group(1)}",
+                                    "full_name": real_name,
+                                    "headline": bio[:200] if bio else "",
+                                }
+                                break
+        except:
+            pass
+
+        # Fallback to Brave/DDG name search
+        if not result:
+            result = await find_linkedin_for_github_user(real_name, location, bio)
         if result:
             from linkedin_google import save_candidate, score_candidate, init_linkedin_db
             init_linkedin_db()

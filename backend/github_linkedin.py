@@ -208,8 +208,8 @@ async def bridge_github_candidates() -> Dict:
                 "open_to_work": False,
                 "search_keyword": f"github:{username}",
             }
-            score = score_candidate(candidate)
-            save_candidate(candidate, score, source="github_bridge")
+            score, breakdown = score_candidate(candidate)
+            save_candidate(candidate, score, source="github_bridge", score_breakdown=json.dumps(breakdown, ensure_ascii=False))
             linked += 1
 
     return {"candidates_checked": len(rows), "linkedin_profiles_found": linked}

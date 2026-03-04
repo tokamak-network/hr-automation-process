@@ -549,9 +549,14 @@ async def get_outreach_templates():
 
         # Parse English and Korean blocks
         langs = {}
+        subjects = {}
         for lang_label, lang_key in [("### English", "en"), ("### 한국어", "kr")]:
             if lang_label in rest:
                 after = rest.split(lang_label, 1)[1]
+                # Extract subject line if present
+                subj_match = re.search(r'\*\*Subject:\*\*\s*(.+)', after)
+                if subj_match:
+                    subjects[lang_key] = subj_match.group(1).strip()
                 code_match = re.search(r'```\n?(.*?)```', after, re.DOTALL)
                 if code_match:
                     langs[lang_key] = code_match.group(1).strip()
@@ -571,6 +576,7 @@ async def get_outreach_templates():
                 "id": "{}_{}".format(tid, lang_key),
                 "name": name,
                 "language": lang_key,
+                "subject": subjects.get(lang_key, ""),
                 "body": body,
                 "variables": variables,
             })

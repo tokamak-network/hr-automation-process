@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
@@ -58,12 +58,15 @@ interface Candidate {
   source: string;
   notes: string;
   search_keyword?: string;
+  github_url?: string;
+  score_breakdown?: string;
 }
 
 interface OutreachTemplate {
   id: string;
   name: string;
   language: string;
+  subject: string;
   body: string;
   variables: string[];
 }
@@ -92,6 +95,7 @@ function OutreachModal({
 }) {
   const [lang, setLang] = useState<"en" | "kr">("en");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [copied, setCopied] = useState(false);
   const [sending, setSending] = useState(false);
@@ -127,7 +131,10 @@ function OutreachModal({
   useEffect(() => {
     if (selectedTemplateId) {
       const t = templates.find((t) => t.id === selectedTemplateId);
-      if (t) setMessage(fillVariables(t.body));
+      if (t) {
+        setMessage(fillVariables(t.body));
+        setSubject(t.subject || "");
+      }
     }
   }, [selectedTemplateId, templates, fillVariables]);
 
@@ -153,7 +160,8 @@ function OutreachModal({
   }, [lang]);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(message);
+    const clipText = subject ? `Subject: ${subject}\n\n${message}` : message;
+    await navigator.clipboard.writeText(clipText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -249,6 +257,20 @@ function OutreachModal({
             </div>
           </div>
 
+          {/* Subject Line */}
+          {subject && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">
+                Subject
+              </label>
+              <input
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 outline-none focus:border-[#2A72E5]"
+              />
+            </div>
+          )}
+
           {/* Editable Message */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">
@@ -316,6 +338,7 @@ export default function LinkedInPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [searchResult, setSearchResult] = useState<any>(null);
   const [newCandidateIds, setNewCandidateIds] = useState<Set<number>>(new Set());
+  const [scoreTooltip, setScoreTooltip] = useState<{ bd: any; x: number; y: number } | null>(null);
   const [bridging, setBridging] = useState(false);
   const [dropdownCategory, setDropdownCategory] = useState("");
 
@@ -702,31 +725,49 @@ export default function LinkedInPage() {
             </thead>
             <tbody>
               {candidates.map((c) => (
-                <>
+                <React.Fragment key={c.id}>
                   <tr
-                    key={c.id}
                     className="hover:bg-gray-50 transition border-b border-gray-200 cursor-pointer"
                     onClick={() => toggleExpanded(c.id)}
                   >
                     <td className="py-2.5 px-4">
-                      <a
-                        href={c.profile_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-medium text-[#2A72E5] hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <span className="font-medium text-gray-900">
                         {c.full_name}
-                      </a>
+                      </span>
+                      <span className="ml-1.5 inline-flex gap-1 items-center">
+                        {(() => {
+                          const linkedinUrl = c.profile_url?.includes("linkedin.com") ? c.profile_url : null;
+                          const githubUrl = c.github_url || (c.profile_url?.includes("github.com") ? c.profile_url : null);
+                          return (
+                            <>
+                              {linkedinUrl && (
+                                <a href={linkedinUrl} target="_blank" rel="noopener noreferrer"
+                                  className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-200 transition"
+                                  onClick={(e) => e.stopPropagation()} title="Open LinkedIn">
+                                  🔗 LinkedIn
+                                </a>
+                              )}
+                              {githubUrl && (
+                                <a href={githubUrl} target="_blank" rel="noopener noreferrer"
+                                  className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded hover:bg-purple-200 transition"
+                                  onClick={(e) => e.stopPropagation()} title="Open GitHub">
+                                  🐙 GitHub
+                                </a>
+                              )}
+                              {!linkedinUrl && !githubUrl && c.profile_url && (
+                                <a href={c.profile_url} target="_blank" rel="noopener noreferrer"
+                                  className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-200 transition"
+                                  onClick={(e) => e.stopPropagation()}>
+                                  🔗 Profile
+                                </a>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </span>
                       {newCandidateIds.has(c.id) && (
-                        <span className="ml-1 text-[10px] bg-blue-100 text-blue-700 px-1.5 rounded font-semibold">
+                        <span className="ml-1 text-[10px] bg-green-100 text-green-700 px-1.5 rounded font-semibold">
                           New
-                        </span>
-                      )}
-                      {(c.source === "github_bridge" ||
-                        c.source === "github") && (
-                        <span className="ml-1 text-[10px] bg-purple-100 text-purple-700 px-1.5 rounded">
-                          GitHub
                         </span>
                       )}
                     </td>
@@ -738,13 +779,21 @@ export default function LinkedInPage() {
                     </td>
                     <td className="py-2.5 px-4 text-center">
                       <span
-                        className={`font-mono text-xs px-2 py-0.5 rounded ${
+                        className={`font-mono text-xs px-2 py-0.5 rounded cursor-help ${
                           c.score >= 8
                             ? "bg-green-100 text-green-700"
                             : c.score >= 6
                               ? "bg-yellow-100 text-yellow-700"
                               : "bg-gray-100 text-gray-500"
                         }`}
+                        onMouseEnter={(e) => {
+                          if (!c.score_breakdown) return;
+                          try {
+                            const bd = JSON.parse(c.score_breakdown);
+                            setScoreTooltip({ bd, x: e.clientX, y: e.clientY });
+                          } catch {}
+                        }}
+                        onMouseLeave={() => setScoreTooltip(null)}
                       >
                         {c.score?.toFixed(1)}
                       </span>
@@ -901,10 +950,44 @@ export default function LinkedInPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Score Tooltip */}
+      {scoreTooltip && (
+        <div
+          className="fixed z-[9999] w-56 p-3 bg-gray-900 text-white text-[11px] rounded-lg shadow-xl pointer-events-none"
+          style={{ left: scoreTooltip.x - 112, top: scoreTooltip.y - 10, transform: "translateY(-100%)" }}
+        >
+          <div className="font-semibold mb-1.5 text-xs">Score Breakdown</div>
+          <div className="space-y-1">
+            <div className="flex justify-between">
+              <span>🎯 Domain Alignment</span>
+              <span className="font-mono">{scoreTooltip.bd.alignment ?? 0}/3.5</span>
+            </div>
+            {scoreTooltip.bd.alignment_terms?.length > 0 && (
+              <div className="text-gray-400 pl-4 text-[10px]">{scoreTooltip.bd.alignment_terms.join(", ")}</div>
+            )}
+            <div className="flex justify-between">
+              <span>⚡ Execution</span>
+              <span className="font-mono">{scoreTooltip.bd.execution ?? 0}/{scoreTooltip.bd.base <= 2.5 ? "2.5" : "2.0"}</span>
+            </div>
+            {scoreTooltip.bd.languages?.length > 0 && (
+              <div className="text-gray-400 pl-4 text-[10px]">{scoreTooltip.bd.languages.join(", ")}</div>
+            )}
+            <div className="flex justify-between">
+              <span>📞 Contactability</span>
+              <span className="font-mono">{scoreTooltip.bd.contactability ?? 0}/1.5</span>
+            </div>
+            <div className="flex justify-between border-t border-gray-700 pt-1 mt-1 font-semibold">
+              <span>Total</span>
+              <span className="font-mono">{scoreTooltip.bd.total}/10</span>
+            </div>
+          </div>
         </div>
       )}
     </div>

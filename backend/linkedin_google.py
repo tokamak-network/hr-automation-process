@@ -193,34 +193,93 @@ async def search_fallback(query: str) -> List[Dict]:
         return []
 
 
-def score_candidate(candidate: dict) -> float:
-    """Score a candidate based on profile info."""
-    score = 5.0
+def score_candidate(candidate: dict) -> tuple:
+    """Score a candidate based on profile info and Tokamak alignment.
+    
+    Returns (score, breakdown_dict).
+    Scoring breakdown (max 10.0):
+    - Base: 3.0
+    - Tokamak domain alignment: up to 3.5 (core blockchain + Tokamak-specific areas)
+    - Execution signals: up to 2.0 (experience level, languages)
+    - Contactability: up to 1.5 (open to work, hireable)
+    """
+    score = 3.0
+    breakdown = {"base": 3.0}
 
     headline = (candidate.get("headline") or "").lower()
+    bio = (candidate.get("raw_data") or "").lower()
+    combined = headline + " " + bio
 
-    high_value = ["ethereum", "solidity", "layer 2", "l2", "zk", "rollup",
-                  "defi", "smart contract", "blockchain protocol"]
-    for term in high_value:
-        if term in headline:
-            score += 1.0
+    # --- Tokamak Domain Alignment (max 3.5) ---
+    alignment = 0.0
+    matched_domains = []
+    
+    core_terms = ["layer 2", "l2", "rollup", "zk", "zero knowledge", "evm",
+                  "ethereum", "smart contract", "solidity"]
+    core_hits = [t for t in core_terms if t in combined]
+    alignment += min(2.0, len(core_hits) * 0.5)
+    matched_domains.extend(core_hits)
+    
+    domain_terms = {
+        "staking": 0.3, "defi": 0.3, "dao": 0.3, "governance": 0.3,
+        "bridge": 0.3, "cross-chain": 0.3, "nft": 0.2,
+        "ai agent": 0.3, "ai tooling": 0.3,
+        "protocol": 0.2, "node": 0.2, "validator": 0.2,
+    }
+    for term, weight in domain_terms.items():
+        if term in combined:
+            alignment += weight
+            matched_domains.append(term)
+    alignment = min(3.5, alignment)
+    score += alignment
+    breakdown["alignment"] = round(alignment, 1)
+    breakdown["alignment_terms"] = matched_domains
 
+    # --- Execution Signals (max 2.0) ---
+    execution = 0.0
+    exec_details = []
+    
     if any(w in headline for w in ["lead", "senior", "principal", "architect", "founder", "cto"]):
-        score += 0.5
+        execution += 0.5
+        exec_details.append("seniority")
+    
+    tokamak_langs = {"typescript": 0.2, "javascript": 0.1, "solidity": 0.3, 
+                     "rust": 0.2, "python": 0.2, "go": 0.2, "circom": 0.3}
+    matched_langs = []
+    for lang, weight in tokamak_langs.items():
+        if lang in combined:
+            execution += weight
+            matched_langs.append(lang)
+    execution = min(2.0, execution)
+    score += execution
+    breakdown["execution"] = round(execution, 1)
+    if exec_details:
+        breakdown["execution_details"] = exec_details
+    if matched_langs:
+        breakdown["languages"] = matched_langs
 
+    # --- Contactability (max 1.5) ---
+    contact = 0.0
+    contact_details = []
     if candidate.get("open_to_work"):
-        score += 1.5
-
-    if any(w in headline for w in ["rust", "typescript", "python"]):
-        score += 0.3
-
+        contact += 1.0
+        contact_details.append("open_to_work")
+    
     if any(w in headline for w in ["audit", "security", "formal verification"]):
-        score += 0.5
+        contact += 0.5
+        contact_details.append("security_niche")
+    contact = min(1.5, contact)
+    score += contact
+    breakdown["contactability"] = round(contact, 1)
+    if contact_details:
+        breakdown["contact_details"] = contact_details
 
-    return min(score, 10.0)
+    final_score = min(round(score, 1), 10.0)
+    breakdown["total"] = final_score
+    return final_score, breakdown
 
 
-def save_candidate(candidate: dict, score: float, source: str = "search") -> bool:
+def save_candidate(candidate: dict, score: float, source: str = "search", score_breakdown: str = "") -> bool:
     """Save candidate to database."""
     conn = sqlite3.connect(DB_PATH)
     try:
@@ -236,8 +295,8 @@ def save_candidate(candidate: dict, score: float, source: str = "search") -> boo
         conn.execute("""
             INSERT OR REPLACE INTO linkedin_candidates
             (linkedin_username, full_name, headline, location, profile_url,
-             open_to_work, search_keyword, raw_data, score, created_at, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             open_to_work, search_keyword, raw_data, score, created_at, source, score_breakdown)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             candidate["linkedin_username"],
             candidate["full_name"],
@@ -250,6 +309,7 @@ def save_candidate(candidate: dict, score: float, source: str = "search") -> boo
             score,
             datetime.utcnow().isoformat(),
             source,
+            score_breakdown,
         ))
         conn.commit()
         return conn.total_changes > 0
@@ -290,11 +350,12 @@ async def search_linkedin_candidates(
             if not candidate:
                 continue
 
-            score = score_candidate(candidate)
+            score, breakdown = score_candidate(candidate)
             candidate["score"] = score
+            candidate["score_breakdown"] = json.dumps(breakdown, ensure_ascii=False)
             total_found += 1
 
-            saved = save_candidate(candidate, score, source="search")
+            saved = save_candidate(candidate, score, source="search", score_breakdown=json.dumps(breakdown, ensure_ascii=False))
             if saved:
                 total_saved += 1
                 # Retrieve the saved candidate's ID

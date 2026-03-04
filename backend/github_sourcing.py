@@ -64,40 +64,96 @@ def _init_db():
     conn.close()
 
 
-def score_github_candidate(user_data: dict) -> float:
-    """Score a candidate based on GitHub profile."""
-    score = 4.0  # base
+def score_github_candidate(user_data: dict) -> tuple:
+    """Score a candidate based on GitHub profile and Tokamak alignment.
+    
+    Returns (score, breakdown_dict).
+    """
+    score = 2.5
+    breakdown = {"base": 2.5}
 
     bio = (user_data.get("bio") or "").lower()
+    blog = (user_data.get("blog") or "").lower()
+    combined = bio + " " + blog
+
+    # --- Tokamak Domain Alignment (max 3.5) ---
+    alignment = 0.0
+    matched_domains = []
     
-    # Blockchain keywords in bio
-    high_value = ["ethereum", "solidity", "layer 2", "l2", "zk", "rollup",
-                  "defi", "smart contract", "blockchain", "web3", "evm"]
-    keyword_hits = sum(1 for term in high_value if term in bio)
-    score += min(2.0, keyword_hits * 0.5)  # Cap keyword bonus at 2.0
+    core_terms = ["ethereum", "solidity", "layer 2", "l2", "zk", "zero knowledge",
+                  "rollup", "evm", "smart contract", "blockchain", "web3"]
+    core_hits = [t for t in core_terms if t in combined]
+    alignment += min(2.0, len(core_hits) * 0.5)
+    matched_domains.extend(core_hits)
+    
+    domain_terms = {
+        "staking": 0.3, "defi": 0.3, "dao": 0.3, "governance": 0.3,
+        "bridge": 0.3, "cross-chain": 0.3, "nft": 0.2,
+        "ai agent": 0.3, "ai tooling": 0.3,
+        "protocol": 0.2, "node": 0.2, "validator": 0.2,
+    }
+    for term, weight in domain_terms.items():
+        if term in combined:
+            alignment += weight
+            matched_domains.append(term)
+    alignment = min(3.5, alignment)
+    score += alignment
+    breakdown["alignment"] = round(alignment, 1)
+    breakdown["alignment_terms"] = matched_domains
 
-    # Seniority signals
+    # --- GitHub Activity & Execution (max 2.5) ---
+    execution = 0.0
+    exec_details = []
+    matched_langs = []
+    
     if any(w in bio for w in ["lead", "senior", "principal", "architect", "founder", "cto"]):
-        score += 0.5
-
-    # Hireable flag
-    if user_data.get("hireable"):
-        score += 1.5
-
-    # Activity/reputation
+        execution += 0.5
+        exec_details.append("seniority")
+    
     followers = user_data.get("followers", 0)
     repos = user_data.get("public_repos", 0)
-    score += min(1.0, followers / 500)
-    score += min(0.5, repos / 50)
+    execution += min(0.8, followers / 500)
+    execution += min(0.4, repos / 50)
+    if followers > 0:
+        exec_details.append(f"{followers} followers")
+    if repos > 0:
+        exec_details.append(f"{repos} repos")
+    
+    tokamak_langs = {"typescript": 0.2, "solidity": 0.3, "rust": 0.2, 
+                     "python": 0.2, "go": 0.2, "circom": 0.3}
+    for lang, weight in tokamak_langs.items():
+        if lang in combined:
+            execution += weight
+            matched_langs.append(lang)
+    execution = min(2.5, execution)
+    score += execution
+    breakdown["execution"] = round(execution, 1)
+    if exec_details:
+        breakdown["execution_details"] = exec_details
+    if matched_langs:
+        breakdown["languages"] = matched_langs
 
-    # Language signals
-    if any(w in bio for w in ["rust", "typescript", "python", "go"]):
-        score += 0.3
+    # --- Contactability (max 1.5) ---
+    contact = 0.0
+    contact_details = []
+    if user_data.get("hireable"):
+        contact += 1.0
+        contact_details.append("hireable")
+    if user_data.get("linkedin_username"):
+        contact += 0.5
+        contact_details.append("has_linkedin")
+    contact = min(1.5, contact)
+    score += contact
+    breakdown["contactability"] = round(contact, 1)
+    if contact_details:
+        breakdown["contact_details"] = contact_details
 
-    return min(round(score, 1), 10.0)
+    final_score = min(round(score, 1), 10.0)
+    breakdown["total"] = final_score
+    return final_score, breakdown
 
 
-def save_github_candidate(user_data: dict, score: float, search_query: str) -> bool:
+def save_github_candidate(user_data: dict, score: float, search_query: str, score_breakdown: str = "") -> bool:
     """Save a GitHub-discovered candidate to linkedin_candidates table."""
     conn = sqlite3.connect(DB_PATH)
     
@@ -124,8 +180,8 @@ def save_github_candidate(user_data: dict, score: float, search_query: str) -> b
         conn.execute("""
             INSERT OR REPLACE INTO linkedin_candidates
             (linkedin_username, full_name, headline, location, profile_url,
-             open_to_work, search_keyword, raw_data, score, created_at, source, github_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             open_to_work, search_keyword, raw_data, score, created_at, source, github_url, score_breakdown)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             db_username,
             user_data.get("name") or github_login,
@@ -145,6 +201,7 @@ def save_github_candidate(user_data: dict, score: float, search_query: str) -> b
             datetime.utcnow().isoformat(),
             "github",
             f"https://github.com/{github_login}",
+            score_breakdown,
         ))
         conn.commit()
         return conn.total_changes > 0
@@ -231,10 +288,10 @@ async def search_github_developers(
                     "linkedin_username": linkedin_match.group(1) if linkedin_match else "",
                 }
                 
-                score = score_github_candidate(user_data)
+                score, breakdown = score_github_candidate(user_data)
                 total_found += 1
                 
-                saved = save_github_candidate(user_data, score, query)
+                saved = save_github_candidate(user_data, score, query, score_breakdown=json.dumps(breakdown, ensure_ascii=False))
                 if saved:
                     total_saved += 1
                     # Retrieve saved candidate ID using same db_username logic

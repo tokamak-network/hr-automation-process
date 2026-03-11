@@ -466,6 +466,121 @@ async def get_team_profile(github_username: str):
     return p
 
 
+@app.delete("/api/team/profiles/{github_username}")
+async def delete_team_profile(github_username: str):
+    """Delete a team member profile."""
+    db = await get_db()
+    row = await db.execute("SELECT id FROM team_profiles WHERE github_username = ?", (github_username,))
+    if not await row.fetchone():
+        await db.close()
+        raise HTTPException(404, "Profile not found")
+    await db.execute("DELETE FROM team_profiles WHERE github_username = ?", (github_username,))
+    await db.commit()
+    await db.close()
+    return {"deleted": github_username}
+
+
+class AddTeamMemberRequest(BaseModel):
+    github_username: str
+
+
+@app.post("/api/team/profiles")
+async def add_team_profile(req: AddTeamMemberRequest):
+    """Add a team member by GitHub username. Fetches profile from GitHub API and scans their activity."""
+    import os
+    from github import Github, GithubException
+    from collections import Counter, defaultdict
+    from datetime import datetime, timedelta
+    from team_profiler import _repo_to_domains, _langs_to_expertise
+
+    token = os.getenv("GITHUB_TOKEN", "")
+    if not token:
+        raise HTTPException(400, "GITHUB_TOKEN not configured")
+
+    g = Github(token, per_page=100)
+    username = req.github_username.strip().lstrip("@")
+
+    # Fetch user info
+    try:
+        user = g.get_user(username)
+    except GithubException:
+        raise HTTPException(404, f"GitHub user '{username}' not found")
+
+    # Check if already exists
+    db = await get_db()
+    row = await db.execute("SELECT id FROM team_profiles WHERE github_username = ?", (username,))
+    if await row.fetchone():
+        await db.close()
+        raise HTTPException(409, f"'{username}' already exists in team profiles")
+
+    # Scan tokamak-network org repos for this user's activity
+    try:
+        org = g.get_organization("tokamak-network")
+        all_repos = list(org.get_repos(sort="updated", type="all"))[:50]
+    except Exception as e:
+        await db.close()
+        raise HTTPException(500, f"Failed to access org repos: {e}")
+
+    six_months_ago = datetime.utcnow() - timedelta(days=180)
+    commits_per_repo = Counter()
+    languages = Counter()
+    domains = Counter()
+    repos_detail = []
+
+    for repo in all_repos:
+        try:
+            commits = list(repo.get_commits(author=username, since=six_months_ago))
+            if not commits:
+                continue
+            count = len(commits)
+            commits_per_repo[repo.name] = count
+
+            repo_domains = _repo_to_domains(repo.name, getattr(repo, "topics", []) or [], repo.description)
+            for d in repo_domains:
+                domains[d] += count
+
+            try:
+                repo_langs = repo.get_languages()
+                for lang, bytes_count in repo_langs.items():
+                    languages[lang] += bytes_count
+            except Exception:
+                pass
+
+            repos_detail.append({"name": repo.name, "commits": count, "language": max(repo.get_languages() or {"Unknown": 0}, key=lambda k: repo.get_languages().get(k, 0), default="Unknown")})
+        except Exception:
+            continue
+
+    # Build expertise
+    lang_expertise = _langs_to_expertise(dict(languages))
+    domain_total = sum(domains.values()) or 1
+    expertise = {**lang_expertise}
+    for d, c in domains.items():
+        expertise[d] = max(expertise.get(d, 0), min(c / domain_total, 1.0))
+
+    review_count = sum(commits_per_repo.values())
+    top_repos = sorted(repos_detail, key=lambda r: -r["commits"])[:5]
+    top_languages = dict(Counter(languages).most_common(10))
+    now = datetime.utcnow().isoformat()
+
+    await db.execute("""
+        INSERT INTO team_profiles (github_username, display_name, avatar_url, expertise_areas, top_repos, languages, review_count, last_active, last_profiled, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    """, (
+        username,
+        user.name or username,
+        user.avatar_url or "",
+        json.dumps(expertise),
+        json.dumps(top_repos),
+        json.dumps(top_languages),
+        review_count,
+        now, now,
+    ))
+    await db.commit()
+    await db.close()
+
+    return {"added": username, "display_name": user.name or username, "repos_scanned": len(all_repos), "commits_found": review_count}
+
+
 # ── LinkedIn Sourcing Endpoints ──────────────────────────────────────────────
 
 

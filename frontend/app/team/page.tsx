@@ -22,6 +22,9 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
+  const [newUsername, setNewUsername] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addResult, setAddResult] = useState<any>(null);
 
   const loadProfiles = () => {
     setLoading(true);
@@ -55,6 +58,39 @@ export default function TeamPage() {
     }
   };
 
+  const deleteProfile = async (username: string) => {
+    if (!confirm(`Remove ${username} from team profiles?`)) return;
+    try {
+      const res = await fetch(`${API}/api/team/profiles/${username}`, { method: "DELETE" });
+      if (res.ok) loadProfiles();
+      else alert("Failed to delete");
+    } catch { alert("Error deleting profile"); }
+  };
+
+  const addMember = async () => {
+    const username = newUsername.trim().replace(/^@/, "");
+    if (!username) return;
+    setAdding(true);
+    setAddResult(null);
+    try {
+      const res = await fetch(`${API}/api/team/profiles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ github_username: username }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAddResult({ success: `Added ${data.display_name || username} (${data.commits_found} commits found)` });
+        setNewUsername("");
+        loadProfiles();
+      } else {
+        setAddResult({ error: data.detail || "Failed to add" });
+      }
+    } catch (e: any) {
+      setAddResult({ error: e.message });
+    } finally { setAdding(false); }
+  };
+
   const topSkills = (areas: Record<string, number>) =>
     Object.entries(areas || {}).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
@@ -68,14 +104,37 @@ export default function TeamPage() {
           <h1 className="text-2xl font-bold text-gray-900">Team Profiles</h1>
           <p className="text-sm mt-1 text-gray-400">Reviewer pool — auto-matched to candidates for interviews</p>
         </div>
-        <button
-          onClick={triggerScan}
-          disabled={scanning}
-          className="px-4 py-2 disabled:opacity-50 rounded text-sm font-medium text-white bg-[#1C1C1C] hover:bg-gray-800 transition"
-        >
-          {scanning ? "⏳ Scanning GitHub (약 2분 소요)..." : "🔄 Scan Profiles"}
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={newUsername}
+            onChange={e => setNewUsername(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addMember()}
+            placeholder="GitHub username"
+            className="px-3 py-2 border border-gray-300 rounded text-sm w-44 focus:outline-none focus:border-[#2A72E5]"
+          />
+          <button
+            onClick={addMember}
+            disabled={adding || !newUsername.trim()}
+            className="px-4 py-2 disabled:opacity-50 rounded text-sm font-medium text-white bg-[#2A72E5] hover:bg-blue-600 transition"
+          >
+            {adding ? "Adding..." : "+ Add"}
+          </button>
+          <button
+            onClick={triggerScan}
+            disabled={scanning}
+            className="px-4 py-2 disabled:opacity-50 rounded text-sm font-medium text-white bg-[#1C1C1C] hover:bg-gray-800 transition"
+          >
+            {scanning ? "⏳ Scanning..." : "🔄 Scan All"}
+          </button>
+        </div>
       </div>
+
+      {addResult && (
+        <div className={`mb-4 p-3 rounded text-sm border ${addResult.error ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+          {addResult.error ? <span className="text-red-600">⚠️ {addResult.error}</span> : <span className="text-green-700">✅ {addResult.success}</span>}
+        </div>
+      )}
 
       {scanResult && (
         <div className={`mb-6 p-4 rounded text-sm border ${scanResult.error ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
@@ -109,6 +168,7 @@ export default function TeamPage() {
                 <th className="py-3 px-4">Main Work</th>
                 <th className="py-3 px-4">Key Skills</th>
                 <th className="py-3 px-4">Last Active</th>
+                <th className="py-3 px-4 w-16"></th>
               </tr>
             </thead>
             <tbody>
@@ -150,6 +210,13 @@ export default function TeamPage() {
                   </td>
                   <td className="py-3 px-4 text-xs text-gray-400">
                     {p.last_profiled ? new Date(p.last_profiled).toLocaleDateString() : "—"}
+                  </td>
+                  <td className="py-3 px-4">
+                    <button
+                      onClick={() => deleteProfile(p.github_username)}
+                      className="text-xs text-red-400 hover:text-red-600 transition"
+                      title="Remove from team"
+                    >✕</button>
                   </td>
                 </tr>
               ))}

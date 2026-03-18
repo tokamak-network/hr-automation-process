@@ -1,4 +1,4 @@
-# Tokamak Hiring System
+# Tokamak HR Solution
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue?logo=python)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?logo=fastapi)](https://fastapi.tiangolo.com)
@@ -6,9 +6,62 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Tokamak Network](https://img.shields.io/badge/Tokamak-Network-blue?logo=ethereum)](https://tokamak.network)
 
-**AI-powered recruitment automation for Ethereum L2 teams. No resumes — evaluate candidates by real deliverables (Track B).**
+**Comprehensive HR platform for crypto-native teams — Payroll (USDT/Token), Tax Simulation, Recruitment, and more.**
 
-AI 기반 채용 자동화 시스템. 이력서 대신 결과물(Track B)로 평가하고, 후보자를 자동으로 발굴합니다.
+블록체인 팀을 위한 종합 HR 솔루션. 크립토 급여(USDT/TOKAMAK), 소득세 시뮬레이션, AI 기반 채용을 하나의 플랫폼에서 관리합니다.
+
+---
+
+## 🏗️ 프로젝트 구조
+
+이 레포지토리는 Tokamak Network의 종합 HR 솔루션으로, 채용에서 시작하여 급여·세금·근태·퇴사까지 확장하는 올인원 플랫폼입니다.
+
+```
+tokamak-hr/
+├── frontend/          # 채용 시스템 (Hiring) — Next.js
+├── backend/           # 채용 시스템 (Hiring) — FastAPI
+├── payroll/           # 급여·세금 모듈 (NEW) — Next.js + FastAPI
+│   ├── frontend/      # 급여 대시보드, 세금 시뮬레이션 UI
+│   └── backend/       # 급여 API, 소득세 계산 엔진
+├── docs/
+│   ├── HR_SOLUTION_SPEC.md    # 종합 HR 솔루션 확정 스펙
+│   ├── BENCHMARKING.md        # 국내 HR 솔루션 벤치마킹
+│   ├── CONCEPTS.md            # 5개 컨셉 제안서
+│   └── LINKEDIN_SETUP.md     # LinkedIn 설정 가이드
+└── templates/         # 아웃리치 템플릿
+```
+
+## 📋 모듈 현황
+
+| 모듈 | 상태 | 설명 |
+|------|------|------|
+| 🎯 채용 (Hiring) | ✅ 운영중 | AI Track B 평가, GitHub Monitor, LinkedIn 소싱 |
+| 💰 급여 (Payroll) | 🔨 MVP | USDT 월급여, TOKAMAK 인센티브, 잔고 대시보드 |
+| 📊 세금 (Tax) | 🔨 MVP | 근로소득세 시뮬레이션, 적립금 관리, 연말/퇴사 정산 |
+| 📅 근태 | 📋 계획 | 자율 출퇴근 기록 |
+| 🚪 퇴사 | 📋 계획 | 퇴사 프로세스, 최종 정산 |
+
+---
+
+## 💰 급여·세금 시스템 핵심
+
+### 급여 구조
+- **월급여**: USDT → 전날 종가 기준 KRW 환산
+- **분기 인센티브**: TOKAMAK 토큰 → 전날 업비트 종가 기준 KRW 환산
+- **독립계약자 형태** → 원천징수 없음, 근로소득세 시뮬레이션으로 적립금 운영
+
+### 소득세 시뮬레이션
+- **월별**: 연간 USDT 예상액 기준 세율 → 보수적 과세
+- **분기별**: USDT 예상액 + 누적 인센티브 합산 기준 세율 재조정
+- **연말토큰정산**: 실제 총소득 확정 → 재계산 → 환급 (보수적 과세로 대부분 환급)
+- **퇴사정산**: 퇴사 시점 총소득 기준 재계산 → 환급 or 추가 공제
+
+### 워크플로우
+1. **D-7**: 예상 비용 산출 → 텔레그램 알림
+2. **D-1**: 전날 종가 기준 급여 확정 → 텔레그램 알림
+3. **세금 계산** → 적립금 산출 → 실 지급액 확정
+4. **메타마스크 지급** (Kevin → Jaden → 팀원)
+5. **트랜잭션 기록** (지갑 주소 기반 자동 조회)
 
 ## 🎯 핵심 철학
 - **이력서 무의미** → 지원자가 토카막 생태계에 기여할 수 있는 결과물(코드/프로덕트)을 제출

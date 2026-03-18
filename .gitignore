@@ -4,3 +4,8 @@ frontend/node_modules/
 frontend/.next/
 __pycache__/
 backend/.env
+payroll/backend/venv/
+payroll/backend/*.db
+payroll/frontend/node_modules/
+payroll/frontend/.next/
+.DS_Store

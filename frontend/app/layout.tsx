@@ -2,39 +2,28 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { UserProvider } from "./UserContext";
 import UserSelector from "./UserSelector";
+import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "Tokamak Hiring Framework",
-  description: "AI-powered hiring pipeline for Tokamak Network",
+  title: "Tokamak HR Solution",
+  description: "Hiring & HR Management for Tokamak Network",
 };
-
-const navLinks = [
-  { href: "/submit", label: "Submit" },
-  { href: "/monitor", label: "Monitor" },
-  { href: "/linkedin", label: "Developer Sourcing" },
-  { href: "/team", label: "Team" },
-];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="ko">
       <body className="min-h-screen bg-white text-gray-900">
         <UserProvider>
-          <nav className="border-b border-gray-200 sticky top-0 z-50 bg-white">
-            <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-8">
-              <a href="/" className="flex items-center gap-2.5 shrink-0">
-                <img src="/tokamak-symbol.png" alt="Tokamak" className="h-10 w-auto -mr-1" />
-                <span className="text-xl font-bold tracking-tight text-[#1C1C1C]">Tokamak Hiring</span>
-              </a>
-              {navLinks.map(l => (
-                <a key={l.href} href={l.href} className="text-sm text-gray-500 hover:text-[#1C1C1C] transition font-medium">{l.label}</a>
-              ))}
-              <div className="ml-auto">
+          <div className="flex min-h-screen">
+            <Sidebar />
+            <div className="flex-1 flex flex-col min-h-screen overflow-auto">
+              {/* Top bar with UserSelector */}
+              <header className="h-14 border-b border-gray-200 flex items-center justify-end px-6 shrink-0 bg-white sticky top-0 z-40">
                 <UserSelector />
-              </div>
+              </header>
+              <main className="flex-1 p-8 max-w-6xl">{children}</main>
             </div>
-          </nav>
-          <main className="max-w-6xl mx-auto px-4 py-8">{children}</main>
+          </div>
         </UserProvider>
       </body>
     </html>

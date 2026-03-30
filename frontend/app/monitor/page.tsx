@@ -120,22 +120,47 @@ export default function MonitorPage() {
 
   const scan = async () => {
     setScanning(true);
+    setScanResult(null);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 300000);
-      const res = await fetch(`${API}/api/monitor/scan`, { method: "POST", signal: controller.signal });
-      clearTimeout(timeoutId);
+      const res = await fetch(`${API}/api/monitor/scan`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         setScanResult({ error: data.detail || "Scan failed" });
-      } else {
-        setScanResult(data);
-        load();
+        setScanning(false);
+        return;
       }
+      if (data.status === "already_running") {
+        setScanResult({ info: "Scan already in progress..." });
+      } else {
+        setScanResult({ info: "Scanning in background..." });
+      }
+      // Poll for completion
+      const poll = async () => {
+        for (let i = 0; i < 60; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          try {
+            const statusRes = await fetch(`${API}/api/monitor/scan/status`);
+            const status = await statusRes.json();
+            if (!status.running) {
+              if (status.last_error) {
+                setScanResult({ error: status.last_error });
+              } else if (status.last_result) {
+                setScanResult(status.last_result);
+              }
+              load();
+              setScanning(false);
+              return;
+            }
+          } catch {}
+        }
+        setScanResult({ error: "Scan timed out (5 min)" });
+        setScanning(false);
+      };
+      poll();
     } catch (e: any) {
-      setScanResult({ error: e.name === "AbortError" ? "Scan timed out" : "Scan failed — check network connection" });
+      setScanResult({ error: "Scan failed — check network connection" });
+      setScanning(false);
     }
-    setScanning(false);
   };
 
   const findLinkedInAll = async () => {
@@ -184,7 +209,7 @@ export default function MonitorPage() {
       </div>
 
       {scanResult && (
-        <div className={`mb-4 p-3 rounded text-sm border ${scanResult.error ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+        <div className={`mb-4 p-3 rounded text-sm border ${scanResult.error ? 'border-red-200 bg-red-50' : scanResult.info ? 'border-blue-200 bg-blue-50' : 'border-green-200 bg-green-50'}`}>
           {scanResult.error ? (
             <div>
               <span className="text-red-600 font-medium">⚠️ {scanResult.error}</span>
@@ -192,6 +217,8 @@ export default function MonitorPage() {
                 <p className="text-red-500 text-xs mt-1">Add GITHUB_TOKEN to your backend .env file to enable GitHub scanning.</p>
               )}
             </div>
+          ) : scanResult.info ? (
+            <span className="text-blue-700">⏳ {scanResult.info}</span>
           ) : (
             <span className="text-green-700">✅ Scanned {scanResult.repos_scanned} repos, found {scanResult.external_users_found} external users, analyzed {scanResult.profiles_analyzed} profiles</span>
           )}

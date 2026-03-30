@@ -36,7 +36,7 @@ GITHUB_SEARCH_QUERIES = [
 
 def _init_db():
     """Ensure linkedin_candidates table exists."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS linkedin_candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,7 +155,7 @@ def score_github_candidate(user_data: dict) -> tuple:
 
 def save_github_candidate(user_data: dict, score: float, search_query: str, score_breakdown: str = "") -> bool:
     """Save a GitHub-discovered candidate to linkedin_candidates table."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     
     # Use GitHub username as linkedin_username if no LinkedIn found
     github_login = user_data["login"]
@@ -297,7 +297,7 @@ async def search_github_developers(
                     # Retrieve saved candidate ID using same db_username logic
                     linkedin_un = user_data.get("linkedin_username", "")
                     db_un = linkedin_un if linkedin_un else f"gh_{user.login}"
-                    conn2 = sqlite3.connect(DB_PATH)
+                    conn2 = sqlite3.connect(DB_PATH, timeout=10)
                     row = conn2.execute(
                         "SELECT id FROM linkedin_candidates WHERE linkedin_username = ?",
                         (db_un,)

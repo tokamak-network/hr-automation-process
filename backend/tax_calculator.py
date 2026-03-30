@@ -164,24 +164,22 @@ def calculate_tax(monthly_salary_krw: int, num_dependents: int = 1, num_children
     """
     income_tax = lookup_income_tax(monthly_salary_krw, num_dependents, num_children_8_20)
     
+    import math
+    def _ceil10(n):
+        """10원 단위 올림"""
+        return math.ceil(n / 10) * 10
+    
     # 100%
-    it_100 = income_tax
-    lt_100 = int(it_100 * 0.1)  # 지방소득세 = 소득세의 10%
-    # 10원 미만 절사
-    it_100 = (it_100 // 10) * 10
-    lt_100 = (lt_100 // 10) * 10
+    it_100 = _ceil10(income_tax)
+    lt_100 = _ceil10(int(it_100 * 0.1))
     
     # 80%
-    it_80 = int(income_tax * 0.8)
-    lt_80 = int(it_80 * 0.1)
-    it_80 = (it_80 // 10) * 10
-    lt_80 = (lt_80 // 10) * 10
+    it_80 = _ceil10(int(income_tax * 0.8))
+    lt_80 = _ceil10(int(it_80 * 0.1))
     
     # 120%
-    it_120 = int(income_tax * 1.2)
-    lt_120 = int(it_120 * 0.1)
-    it_120 = (it_120 // 10) * 10
-    lt_120 = (lt_120 // 10) * 10
+    it_120 = _ceil10(int(income_tax * 1.2))
+    lt_120 = _ceil10(int(it_120 * 0.1))
     
     return {
         "monthly_salary_krw": monthly_salary_krw,

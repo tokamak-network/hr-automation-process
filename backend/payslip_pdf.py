@@ -1,136 +1,125 @@
 """
 Payslip PDF Generator — Tokamak Network Service Fee Payslip
-Layout: 3-column (Information | Service Fee Details | Tax Details)
-Matches the original Tokamak Network payslip template.
+Landscape A4, 3-column layout matching original template.
 """
 
 import io
 import os
+import math
 import calendar
 from datetime import date
 
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import mm
-from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
+# ── Constants ──
+BLUE = (42/255, 114/255, 229/255)
+LIGHT_BLUE = (232/255, 240/255, 254/255)
+DARK = (0.1, 0.1, 0.1)
+GRAY = (0.5, 0.5, 0.5)
+BORDER = (0.7, 0.7, 0.7)
+WHITE = (1, 1, 1)
+BG_HEADER = (0.96, 0.96, 0.96)
 
-# ── Font Registration ──
+LOGO_PATH = os.path.join(os.path.dirname(__file__), "tokamak-symbol.png")
 
-_FONT_REGISTERED = False
-_FONT_NAME = "Helvetica"
-_FONT_BOLD = "Helvetica-Bold"
+_FONT = "Helvetica"
+_FONT_B = "Helvetica-Bold"
+_FONT_INIT = False
 
-
-def _register_fonts():
-    global _FONT_REGISTERED, _FONT_NAME, _FONT_BOLD
-    if _FONT_REGISTERED:
+def _init_fonts():
+    global _FONT, _FONT_B, _FONT_INIT
+    if _FONT_INIT:
         return
-    candidates = [
+    _FONT_INIT = True
+    for path, name, idx, bidx in [
         ("/System/Library/Fonts/AppleSDGothicNeo.ttc", "AppleSD", 0, 2),
-        ("/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "ArialUnicode", None, None),
-    ]
-    for path, name, idx, bold_idx in candidates:
+    ]:
         if os.path.exists(path):
             try:
-                if idx is not None:
-                    pdfmetrics.registerFont(TTFont(name, path, subfontIndex=idx))
-                    if bold_idx is not None:
-                        pdfmetrics.registerFont(TTFont(name + "-Bold", path, subfontIndex=bold_idx))
-                        _FONT_BOLD = name + "-Bold"
-                    else:
-                        _FONT_BOLD = name
-                else:
-                    pdfmetrics.registerFont(TTFont(name, path))
-                    _FONT_BOLD = name
-                _FONT_NAME = name
-                _FONT_REGISTERED = True
+                pdfmetrics.registerFont(TTFont(name, path, subfontIndex=idx))
+                pdfmetrics.registerFont(TTFont(name + "B", path, subfontIndex=bidx))
+                _FONT, _FONT_B = name, name + "B"
                 return
-            except Exception:
-                continue
-    _FONT_REGISTERED = True
+            except:
+                pass
 
 
 def _fmt(n: float) -> str:
-    if n == 0:
-        return "-"
-    return f"{n:,.2f}"
-
+    return "-" if n == 0 else f"{n:,.2f}"
 
 def _fmt_krw(n) -> str:
     n = int(round(n))
-    if n == 0:
-        return "-"
-    return f"₩{n:,}"
+    return "-" if n == 0 else f"₩{n:,}"
 
 
 def last_business_day(year: int, month: int) -> date:
-    last_day = date(year, month, calendar.monthrange(year, month)[1])
-    while last_day.weekday() >= 5:
-        last_day = last_day.replace(day=last_day.day - 1)
-    return last_day
+    d = date(year, month, calendar.monthrange(year, month)[1])
+    while d.weekday() >= 5:
+        d = d.replace(day=d.day - 1)
+    return d
 
 
-# ── Drawing Helpers ──
+# ── Drawing helpers ──
 
-BLUE = (42/255, 114/255, 229/255)
-LIGHT_BLUE = (232/255, 240/255, 254/255)
-DARK = (0.15, 0.15, 0.15)
-GRAY = (0.45, 0.45, 0.45)
-BORDER = (0.75, 0.75, 0.75)
-WHITE = (1, 1, 1)
-
-
-def _draw_rect(c, x, y, w, h, fill=None, stroke=BORDER, stroke_width=0.5):
+def rect(c, x, y, w, h, fill=None, stroke=BORDER):
     if fill:
         c.setFillColorRGB(*fill)
         c.rect(x, y, w, h, fill=1, stroke=0)
-    if stroke:
-        c.setStrokeColorRGB(*stroke)
-        c.setLineWidth(stroke_width)
-        c.rect(x, y, w, h, fill=0, stroke=1)
+    c.setStrokeColorRGB(*stroke)
+    c.setLineWidth(0.5)
+    c.rect(x, y, w, h, fill=0, stroke=1)
 
 
-def _draw_text(c, x, y, text, font=None, size=8, color=DARK, align="left", max_width=None):
-    _register_fonts()
-    c.setFont(font or _FONT_NAME, size)
+def text(c, x, y, s, font=None, size=9, color=DARK):
+    _init_fonts()
+    c.setFont(font or _FONT, size)
     c.setFillColorRGB(*color)
-    if align == "right" and max_width:
-        tw = c.stringWidth(text, font or _FONT_NAME, size)
-        c.drawString(x + max_width - tw, y, text)
-    elif align == "center" and max_width:
-        tw = c.stringWidth(text, font or _FONT_NAME, size)
-        c.drawString(x + (max_width - tw) / 2, y, text)
+    c.drawString(x, y, s)
+
+
+def text_r(c, x, y, s, w, font=None, size=9, color=DARK):
+    """Right-aligned text within width w from x."""
+    _init_fonts()
+    f = font or _FONT
+    c.setFont(f, size)
+    c.setFillColorRGB(*color)
+    tw = c.stringWidth(s, f, size)
+    c.drawString(x + w - tw, y, s)
+
+
+def text_c(c, x, y, s, w, font=None, size=9, color=DARK):
+    """Center-aligned text."""
+    _init_fonts()
+    f = font or _FONT
+    c.setFont(f, size)
+    c.setFillColorRGB(*color)
+    tw = c.stringWidth(s, f, size)
+    c.drawString(x + (w - tw) / 2, y, s)
+
+
+def cell(c, x, y, w, h, label, font=None, size=9, color=DARK, fill=None, align="left", pad=8):
+    """Draw a cell with text."""
+    rect(c, x, y, w, h, fill=fill)
+    tx = x + pad
+    if align == "right":
+        text_r(c, x + pad, y + h/2 - size*0.35, label, w - pad*2, font, size, color)
+    elif align == "center":
+        text_c(c, x, y + h/2 - size*0.35, label, w, font, size, color)
     else:
-        c.drawString(x, y, text)
+        text(c, tx, y + h/2 - size*0.35, label, font, size, color)
 
 
-def _draw_wrapped_text(c, x, y, text, font=None, size=8, color=DARK, max_width=100, line_height=11):
-    """Draw text with word wrapping. Returns the number of lines drawn."""
-    _register_fonts()
-    fn = font or _FONT_NAME
-    c.setFont(fn, size)
-    c.setFillColorRGB(*color)
-
-    words = text.split()
-    lines = []
-    current = ""
-    for w in words:
-        test = f"{current} {w}".strip()
-        if c.stringWidth(test, fn, size) <= max_width:
-            current = test
-        else:
-            if current:
-                lines.append(current)
-            current = w
-    if current:
-        lines.append(current)
-
-    for i, line in enumerate(lines):
-        c.drawString(x, y - i * line_height, line)
-    return len(lines)
+def cell2(c, x, y, w, h, line1, line2, font=None, size=9, color=DARK, fill=None, pad=8):
+    """Draw a cell with 2 lines of text."""
+    rect(c, x, y, w, h, fill=fill)
+    lh = size + 3
+    mid = y + h/2
+    text(c, x + pad, mid + lh*0.3, line1, font, size, color)
+    text(c, x + pad, mid - lh*0.7, line2, font, size, color)
 
 
 # ── Main Generator ──
@@ -149,231 +138,211 @@ def generate_payslip_pdf(
     tax_percentage: int = 100,
     issue_date: str = "",
 ) -> bytes:
-    _register_fonts()
+    _init_fonts()
 
-    buffer = io.BytesIO()
-    page_w, page_h = A4  # 595 x 842 pt
-    c = canvas.Canvas(buffer, pagesize=A4)
+    buf = io.BytesIO()
+    pw, ph = landscape(A4)  # 842 x 595
+    c = canvas.Canvas(buf, pagesize=landscape(A4))
 
     # Calculations
     gross_krw = round(service_fee_usdt * exchange_rate)
     net_krw = gross_krw - total_tax_krw
-    income_tax_usdt = income_tax_krw / exchange_rate if exchange_rate > 0 else 0
-    local_tax_usdt = local_tax_krw / exchange_rate if exchange_rate > 0 else 0
-    total_tax_usdt = total_tax_krw / exchange_rate if exchange_rate > 0 else 0
-    net_usdt = service_fee_usdt - total_tax_usdt
+    it_usdt = income_tax_krw / exchange_rate if exchange_rate else 0
+    lt_usdt = local_tax_krw / exchange_rate if exchange_rate else 0
+    tt_usdt = total_tax_krw / exchange_rate if exchange_rate else 0
+    net_usdt = service_fee_usdt - tt_usdt
 
-    payment_date = last_business_day(payment_year, payment_month)
-    period_start = date(payment_year, payment_month, 1)
-    period_end = date(payment_year, payment_month, calendar.monthrange(payment_year, payment_month)[1])
+    pay_date = last_business_day(payment_year, payment_month)
+    p_start = date(payment_year, payment_month, 1)
+    p_end = date(payment_year, payment_month, calendar.monthrange(payment_year, payment_month)[1])
     issue_dt = issue_date if issue_date else date.today().strftime("%Y-%m-%d")
 
-    # ── Layout Constants ──
-    margin_x = 30
-    top_y = page_h - 40
-    col_gap = 12  # gap between the 3 sections
-    total_w = page_w - 2 * margin_x  # ~535
+    # ── Layout ──
+    mx = 35  # margin x
+    my = 35  # margin bottom
+    top = ph - 35
 
-    # 3 sections: Info (wider), Service Fee, Tax Details
-    info_w = total_w * 0.38  # ~203
-    fee_w = total_w * 0.31   # ~166
-    tax_w = total_w * 0.31   # ~166
+    # Logo + Title
+    if os.path.exists(LOGO_PATH):
+        c.drawImage(LOGO_PATH, mx, top - 32, width=35, height=35, mask='auto')
+    text(c, mx + 42, top - 10, "Tokamak Network", _FONT_B, 18, DARK)
 
-    info_x = margin_x
-    fee_x = info_x + info_w + col_gap
-    tax_x = fee_x + fee_w + col_gap
+    # Issue Date box (top right)
+    id_x = pw - mx - 130
+    rect(c, id_x, top - 8, 60, 18)
+    cell(c, id_x, top - 8, 60, 18, "Issue Date", _FONT, 7.5, GRAY, align="center")
+    rect(c, id_x + 60, top - 8, 70, 18)
+    cell(c, id_x + 60, top - 8, 70, 18, issue_dt, _FONT, 8, DARK, align="center")
 
-    # Sub-column widths within each section
-    info_label_w = info_w * 0.42
-    info_value_w = info_w * 0.58
-    fee_label_w = fee_w * 0.58
-    fee_value_w = fee_w * 0.42
-    tax_label_w = tax_w * 0.58
-    tax_value_w = tax_w * 0.42
+    # Monetary unit labels
+    mu_y = top - 52
 
-    row_h = 36  # row height
-    header_h = 28
+    # ── 3 Column Sections ──
+    gap = 14
+    usable = pw - 2 * mx - 2 * gap
+    info_w = usable * 0.36
+    fee_w = usable * 0.32
+    tax_w = usable * 0.32
 
-    # ── Title ──
-    _draw_text(c, margin_x, top_y, "SERVICE FEE PAYSLIP", _FONT_BOLD, 14, DARK)
-    _draw_text(c, 0, top_y, f"Issue Date: {issue_dt}", _FONT_NAME, 8, GRAY, "right", page_w - margin_x)
+    ix = mx  # info x
+    fx = ix + info_w + gap  # fee x
+    tx = fx + fee_w + gap  # tax x
 
-    # ── Monetary unit labels ──
-    y = top_y - 18
-    _draw_text(c, fee_x, y, "Monetary unit : USDT", _FONT_NAME, 7, GRAY)
-    _draw_text(c, tax_x, y, "Monetary unit : USDT", _FONT_NAME, 7, GRAY)
+    # Monetary unit labels above fee and tax
+    text(c, fx + fee_w/2 - 30, mu_y + 4, "Monetary unit : USDT", _FONT, 7, GRAY)
+    text(c, tx + tax_w/2 - 30, mu_y + 4, "Monetary unit : USDT", _FONT, 7, GRAY)
 
-    # ── Section Headers ──
-    y = top_y - 32
-    _draw_rect(c, info_x, y, info_w, header_h, fill=BLUE)
-    _draw_text(c, info_x, y + 9, "Information", _FONT_BOLD, 9, WHITE, "center", info_w)
+    # Section headers
+    hdr_y = mu_y - 6
+    hdr_h = 26
 
-    _draw_rect(c, fee_x, y, fee_w, header_h, fill=BLUE)
-    _draw_text(c, fee_x, y + 9, "Service Fee Details", _FONT_BOLD, 9, WHITE, "center", fee_w)
+    rect(c, ix, hdr_y - hdr_h, info_w, hdr_h, fill=BLUE)
+    text_c(c, ix, hdr_y - hdr_h + 8, "Information", info_w, _FONT_B, 10, WHITE)
 
-    _draw_rect(c, tax_x, y, tax_w, header_h, fill=BLUE)
-    _draw_text(c, tax_x, y + 9, "Tax Details", _FONT_BOLD, 9, WHITE, "center", tax_w)
+    rect(c, fx, hdr_y - hdr_h, fee_w, hdr_h, fill=BLUE)
+    text_c(c, fx, hdr_y - hdr_h + 8, "Service Fee Details", fee_w, _FONT_B, 10, WHITE)
 
-    # ── Data Rows ──
-    # Info rows
-    info_rows = [
-        ("Company Name", "TOKAMAK NETWORK\nPTE. LTD."),
-        ("Full name of\nContractor", contractor_name),
-        ("Date of payment", payment_date.strftime("%b %d, %Y")),
-        ("Start and end date\nof service fee period", f"{period_start.strftime('%B %d, %Y')} to\n{period_end.strftime('%B %d, %Y')}"),
+    rect(c, tx, hdr_y - hdr_h, tax_w, hdr_h, fill=BLUE)
+    text_c(c, tx, hdr_y - hdr_h + 8, "Tax Details", tax_w, _FONT_B, 10, WHITE)
+
+    # ── Row layout ──
+    rh = 38  # row height
+    r0 = hdr_y - hdr_h  # top of first data row
+
+    il = info_w * 0.40  # info label width
+    iv = info_w * 0.60  # info value width
+    fl = fee_w * 0.55
+    fv = fee_w * 0.45
+    tl = tax_w * 0.55
+    tv = tax_w * 0.45
+
+    # === INFO COLUMN (7 rows) ===
+    info_data = [
+        ("Company Name", "TOKAMAK NETWORK PTE. LTD."),
+        ("Full name of Contractor", contractor_name),
+        ("Date of payment", pay_date.strftime("%b %d, %Y")),
+        ("Start and end date of\nservice fee period", f"{p_start.strftime('%B %d, %Y')} to\n{p_end.strftime('%B %d, %Y')}"),
         ("ERC20 Address", erc20_address or ""),
         ("Transaction URL", transaction_url or ""),
+        ("Notice", ""),
     ]
 
-    fee_rows = [
-        ("Basic service fee\nfor each period", _fmt(service_fee_usdt), False),
-        ("Allowance paid for\nservice fee period", "-", False),
-        ("Any other additional\npayment for each period", "-", False),
-        ("ⓐ Total", _fmt(service_fee_usdt), True),
+    for i, (lbl, val) in enumerate(info_data):
+        ry = r0 - (i + 1) * rh
+        lbl_lines = lbl.split("\n")
+        val_lines = val.split("\n")
+
+        # Label
+        rect(c, ix, ry, il, rh)
+        for li, ln in enumerate(lbl_lines):
+            text(c, ix + 8, ry + rh - 16 - li * 13, ln, _FONT, 9, DARK)
+
+        # Value
+        rect(c, ix + il, ry, iv, rh)
+        for li, ln in enumerate(val_lines):
+            sz = 7.5 if len(ln) > 35 else (8 if len(ln) > 25 else 9)
+            text(c, ix + il + 8, ry + rh - 16 - li * 13, ln, _FONT, sz, DARK)
+
+    # === SERVICE FEE COLUMN ===
+    # Row mapping: (info_row_start, info_row_span, label, value, is_total)
+    fee_items = [
+        (0, 1, "Basic service fee\nfor each period", _fmt(service_fee_usdt), False),
+        (1, 1, "Allowance paid for\nservice fee period", "-", False),
+        (2, 2, "Any other additional\npayment for each period", "-", False),
+        (4, 1, "", "", False),  # blank row aligned with ERC20
+        (5, 1, "ⓐ Total", _fmt(service_fee_usdt), True),
+        (6, 1, "", "", False),  # blank row aligned with Notice
     ]
 
-    tax_rows = [
-        ("Income Tax", _fmt(income_tax_usdt), False),
-        ("Local Income Tax", _fmt(local_tax_usdt), False),
-        ("", "", False),  # empty row
-        ("ⓑ Total", _fmt(total_tax_usdt), True),
-    ]
+    for start, span, lbl, val, is_tot in fee_items:
+        ry = r0 - (start + span) * rh
+        h = rh * span
 
-    y_start = y - row_h  # first data row top
-
-    # Draw Info column (6 rows)
-    for i, (label, value) in enumerate(info_rows):
-        ry = y_start - i * row_h
-
-        # Label cell
-        _draw_rect(c, info_x, ry, info_label_w, row_h)
-        lines = label.split("\n")
-        for li, line in enumerate(lines):
-            _draw_text(c, info_x + 6, ry + row_h - 14 - li * 11, line, _FONT_NAME, 8, DARK)
-
-        # Value cell
-        _draw_rect(c, info_x + info_label_w, ry, info_value_w, row_h)
-        val_lines = value.split("\n")
-        vx = info_x + info_label_w + 6
-        vw = info_value_w - 12
-        for li, line in enumerate(val_lines):
-            # Truncate long text
-            fn = _FONT_NAME
-            sz = 8
-            if len(line) > 30:
-                sz = 6.5
-            _draw_text(c, vx, ry + row_h - 14 - li * 11, line, fn, sz, DARK)
-
-    # Draw Service Fee column (4 rows, with spacing to align with info rows)
-    fee_row_positions = [0, 1, 2, 4]  # row indices to align: basic=row0, allowance=row1, additional=row2/3, total=row4
-    fee_row_map = [
-        (0, 1),  # basic: spans info rows 0
-        (1, 1),  # allowance: spans info row 1
-        (2, 2),  # additional: spans info rows 2-3
-        (4, 2),  # total: spans info rows 4-5
-    ]
-
-    for idx, (start_row, span) in enumerate(fee_row_map):
-        ry = y_start - start_row * row_h
-        rh = row_h * span
-        label, value, is_total = fee_rows[idx]
-
-        # Label cell
-        fill = BLUE if is_total else None
-        text_color = WHITE if is_total else DARK
-        _draw_rect(c, fee_x, ry, fee_label_w, rh, fill=fill)
-        lines = label.split("\n")
-        for li, line in enumerate(lines):
-            _draw_text(c, fee_x + 6, ry + rh - 16 - li * 11, line, _FONT_BOLD if is_total else _FONT_NAME, 8, text_color)
-
-        # Value cell
-        _draw_rect(c, fee_x + fee_label_w, ry, fee_value_w, rh)
-        _draw_text(c, fee_x + fee_label_w, ry + rh - 16, value, _FONT_BOLD if is_total else _FONT_NAME, 9, DARK, "right", fee_value_w - 8)
-
-    # Draw Tax column (4 rows, aligned with fee column)
-    tax_row_map = [
-        (0, 1),  # Income Tax
-        (1, 1),  # Local Income Tax
-        (2, 2),  # empty
-        (4, 2),  # total
-    ]
-
-    for idx, (start_row, span) in enumerate(tax_row_map):
-        ry = y_start - start_row * row_h
-        rh = row_h * span
-        label, value, is_total = tax_rows[idx]
-
-        if not label and not value:
-            # Empty row — just draw border
-            _draw_rect(c, tax_x, ry, tax_w, rh)
+        if not lbl and not val:
+            rect(c, fx, ry, fee_w, h)
             continue
 
-        # Label cell
-        fill = BLUE if is_total else None
-        text_color = WHITE if is_total else DARK
-        _draw_rect(c, tax_x, ry, tax_label_w, rh, fill=fill)
-        lines = label.split("\n")
-        for li, line in enumerate(lines):
-            _draw_text(c, tax_x + 6, ry + rh - 16 - li * 11, line, _FONT_BOLD if is_total else _FONT_NAME, 8, text_color)
+        bg = BLUE if is_tot else None
+        tc = WHITE if is_tot else DARK
+        font = _FONT_B if is_tot else _FONT
 
-        # Value cell
-        _draw_rect(c, tax_x + tax_label_w, ry, tax_value_w, rh)
-        _draw_text(c, tax_x + tax_label_w, ry + rh - 16, value, _FONT_BOLD if is_total else _FONT_NAME, 9, DARK, "right", tax_value_w - 8)
+        # Label
+        rect(c, fx, ry, fl, h, fill=bg)
+        lines = lbl.split("\n")
+        for li, ln in enumerate(lines):
+            text(c, fx + 8, ry + h - 16 - li * 13, ln, font, 9, tc)
 
-    # ── Net Service Fee Box (below tax column) ──
-    net_y = y_start - 6 * row_h - 8
-    net_h = row_h + 4
+        # Value
+        rect(c, fx + fl, ry, fv, h)
+        text_r(c, fx + fl + 4, ry + h/2 - 3, val, fv - 12, _FONT_B if is_tot else _FONT, 10, DARK)
 
-    # Net label
-    _draw_rect(c, tax_x, net_y, tax_label_w, net_h, fill=LIGHT_BLUE)
-    _draw_text(c, tax_x + 6, net_y + net_h - 14, "Net service fee", _FONT_BOLD, 9, DARK)
-    _draw_text(c, tax_x + 6, net_y + net_h - 26, "(ⓐ-ⓑ)", _FONT_NAME, 8, GRAY)
-
-    # Net value
-    _draw_rect(c, tax_x + tax_label_w, net_y, tax_value_w, net_h, fill=LIGHT_BLUE)
-    _draw_text(c, tax_x + tax_label_w, net_y + net_h - 18, _fmt(net_usdt), _FONT_BOLD, 11, DARK, "right", tax_value_w - 8)
-
-    # ── Notice row (below info column) ──
-    notice_y = y_start - 6 * row_h - 8
-    notice_h = net_h
-    _draw_rect(c, info_x, notice_y, info_w, notice_h)
-    _draw_text(c, info_x + 6, notice_y + notice_h - 16, "Notice", _FONT_BOLD, 8, DARK)
-
-    # ── KRW Reference Section ──
-    krw_y = notice_y - 20
-    ref_w = page_w - 2 * margin_x
-
-    # Header
-    _draw_rect(c, margin_x, krw_y - 18, ref_w, 18, fill=(0.96, 0.96, 0.96))
-    _draw_text(c, margin_x + 6, krw_y - 13, "KRW Reference (참고용)", _FONT_BOLD, 8, GRAY)
-
-    # Data rows
-    ref_col_w = ref_w / 4
-    ref_data = [
-        [("적용 환율 (USD-KRW)", _fmt_krw(round(exchange_rate))), ("세액 비율", f"{tax_percentage}%")],
-        [("월 급여액 (Gross KRW)", _fmt_krw(gross_krw)), ("소득세 (KRW)", _fmt_krw(income_tax_krw))],
-        [("세후 수령액 (Net KRW)", _fmt_krw(net_krw)), ("지방소득세 (KRW)", _fmt_krw(local_tax_krw))],
+    # === TAX COLUMN ===
+    tax_items = [
+        (0, 1, "Income Tax", _fmt(it_usdt), False),
+        (1, 1, "Local Income Tax", _fmt(lt_usdt), False),
+        (2, 2, "", "", False),  # blank
+        (4, 1, "", "", False),  # blank aligned with ERC20
+        (5, 1, "ⓑ Total", _fmt(tt_usdt), True),
     ]
 
-    for ri, row_data in enumerate(ref_data):
-        ry = krw_y - 18 - (ri + 1) * 20
-        for ci, (label, value) in enumerate(row_data):
-            lx = margin_x + ci * ref_w / 2
-            _draw_rect(c, lx, ry, ref_col_w, 20)
-            _draw_text(c, lx + 6, ry + 6, label, _FONT_NAME, 7.5, GRAY)
-            _draw_rect(c, lx + ref_col_w, ry, ref_col_w, 20)
-            _draw_text(c, lx + ref_col_w, ry + 6, value, _FONT_BOLD, 8, DARK, "right", ref_col_w - 8)
+    for start, span, lbl, val, is_tot in tax_items:
+        ry = r0 - (start + span) * rh
+        h = rh * span
 
-    # ── Footer Notice ──
-    footer_y = krw_y - 18 - 4 * 20 - 8
-    c.setFont(_FONT_NAME, 7)
-    c.setFillColorRGB(*GRAY)
-    c.drawString(margin_x, footer_y,
-        "Notice: This payslip is generated based on the 2026 Korean Simplified Tax Table (근로소득 간이세액표, revised 2026.2.27).")
-    c.drawString(margin_x, footer_y - 10,
-        "Actual tax amounts may differ from the simplified table calculations. Tax amounts are converted to USDT using the applied exchange rate.")
+        if not lbl and not val:
+            rect(c, tx, ry, tax_w, h)
+            continue
+
+        bg = BLUE if is_tot else None
+        tc = WHITE if is_tot else DARK
+        font = _FONT_B if is_tot else _FONT
+
+        rect(c, tx, ry, tl, h, fill=bg)
+        text(c, tx + 8, ry + h/2 - 3, lbl, font, 9, tc)
+
+        rect(c, tx + tl, ry, tv, h)
+        text_r(c, tx + tl + 4, ry + h/2 - 3, val, tv - 12, _FONT_B if is_tot else _FONT, 10, DARK)
+
+    # === NET SERVICE FEE (aligned with Notice row) ===
+    net_ry = r0 - 7 * rh
+    net_h = rh
+
+    rect(c, tx, net_ry, tl, net_h, fill=LIGHT_BLUE)
+    text(c, tx + 8, net_ry + net_h - 14, "Net service fee", _FONT_B, 10, DARK)
+    text(c, tx + 8, net_ry + net_h - 27, "(ⓐ-ⓑ)", _FONT, 8, GRAY)
+
+    rect(c, tx + tl, net_ry, tv, net_h, fill=LIGHT_BLUE)
+    text_r(c, tx + tl + 4, net_ry + net_h/2 - 4, _fmt(net_usdt), tv - 12, _FONT_B, 12, DARK)
+
+    # ── KRW Reference ──
+    ref_y = net_ry - 20
+    ref_w = pw - 2 * mx
+    ref_rh = 22
+    ref_cw = ref_w / 4
+
+    # Header
+    rect(c, mx, ref_y - ref_rh, ref_w, ref_rh, fill=BG_HEADER)
+    text(c, mx + 8, ref_y - ref_rh + 7, "KRW Reference (참고용)", _FONT_B, 8, GRAY)
+
+    ref_data = [
+        ("적용 환율 (USD-KRW)", _fmt_krw(round(exchange_rate)), "세액 비율", f"{tax_percentage}%"),
+        ("월 급여액 (Gross KRW)", _fmt_krw(gross_krw), "소득세 (KRW)", _fmt_krw(income_tax_krw)),
+        ("세후 수령액 (Net KRW)", _fmt_krw(net_krw), "지방소득세 (KRW)", _fmt_krw(local_tax_krw)),
+    ]
+
+    for ri, (l1, v1, l2, v2) in enumerate(ref_data):
+        ry = ref_y - ref_rh - (ri + 1) * ref_rh
+        cell(c, mx, ry, ref_cw, ref_rh, l1, _FONT, 8, GRAY, pad=8)
+        cell(c, mx + ref_cw, ry, ref_cw, ref_rh, v1, _FONT_B, 8.5, DARK, align="right")
+        cell(c, mx + ref_cw*2, ry, ref_cw, ref_rh, l2, _FONT, 8, GRAY, pad=8)
+        cell(c, mx + ref_cw*3, ry, ref_cw, ref_rh, v2, _FONT_B, 8.5, DARK, align="right")
+
+    # ── Footer ──
+    fy = ref_y - ref_rh - 4 * ref_rh - 12
+    text(c, mx, fy, "Notice: This payslip is generated based on the 2026 Korean Simplified Tax Table (근로소득 간이세액표, revised 2026.2.27).", _FONT, 7, GRAY)
+    text(c, mx, fy - 11, "Actual tax amounts may differ from the simplified table calculations. Tax amounts are converted to USDT using the applied exchange rate.", _FONT, 7, GRAY)
 
     c.save()
-    pdf_bytes = buffer.getvalue()
-    buffer.close()
-    return pdf_bytes
+    result = buf.getvalue()
+    buf.close()
+    return result

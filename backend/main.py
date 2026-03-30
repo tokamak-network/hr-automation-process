@@ -1235,6 +1235,48 @@ async def get_exchange_rate_range(start: str, end: str):
     }
 
 
+# ── Payslip PDF Generator ──
+
+class PayslipRequest(BaseModel):
+    contractor_name: str
+    erc20_address: str = ""
+    transaction_url: str = ""
+    payment_year: int
+    payment_month: int
+    service_fee_usdt: float
+    exchange_rate: float
+    income_tax_krw: int
+    local_tax_krw: int
+    total_tax_krw: int
+    tax_percentage: int = 100
+
+@app.post("/api/hr/payslip/pdf")
+async def generate_payslip(data: PayslipRequest):
+    from fastapi.responses import Response
+    from payslip_pdf import generate_payslip_pdf
+
+    pdf_bytes = generate_payslip_pdf(
+        contractor_name=data.contractor_name,
+        erc20_address=data.erc20_address,
+        transaction_url=data.transaction_url,
+        payment_year=data.payment_year,
+        payment_month=data.payment_month,
+        service_fee_usdt=data.service_fee_usdt,
+        exchange_rate=data.exchange_rate,
+        income_tax_krw=data.income_tax_krw,
+        local_tax_krw=data.local_tax_krw,
+        total_tax_krw=data.total_tax_krw,
+        tax_percentage=data.tax_percentage,
+    )
+
+    filename = f"payslip_{data.contractor_name}_{data.payment_year}{str(data.payment_month).zfill(2)}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.get("/api/hr/market/tokamak")
 async def tokamak_price():
     return {"token": "TOKAMAK", "price_krw": 3200, "source": "mock", "timestamp": datetime.now().isoformat()}

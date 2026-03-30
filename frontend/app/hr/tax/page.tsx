@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const fmt = (n: number) => new Intl.NumberFormat("ko-KR").format(n);
 
@@ -18,11 +18,40 @@ interface TaxResult {
 
 export default function TaxCalculator() {
   const [usdt, setUsdt] = useState("");
+  const [rateDate, setRateDate] = useState("");
   const [exchangeRate, setExchangeRate] = useState("");
+  const [rateLoading, setRateLoading] = useState(false);
+  const [rateSource, setRateSource] = useState("");
   const [dependents, setDependents] = useState(1);
   const [children, setChildren] = useState("");
   const [result, setResult] = useState<TaxResult | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // 날짜 변경 시 환율 자동 조회
+  useEffect(() => {
+    if (!rateDate) return;
+    const fetchRate = async () => {
+      setRateLoading(true);
+      setRateSource("");
+      try {
+        const dateStr = rateDate.replace(/-/g, "");
+        const res = await fetch(`/api/hr/exchange-rate?date=${dateStr}`);
+        if (res.ok) {
+          const data = await res.json();
+          setExchangeRate(String(data.rate));
+          setRateSource(`${data.source} | ${data.date} | ${data.item}`);
+        } else {
+          const err = await res.json();
+          setRateSource(`조회 실패: ${err.detail || "해당 날짜 데이터 없음"}`);
+        }
+      } catch {
+        setRateSource("API 연결 실패");
+      } finally {
+        setRateLoading(false);
+      }
+    };
+    fetchRate();
+  }, [rateDate]);
 
   const krwAmount = usdt && exchangeRate ? Math.round(parseFloat(usdt) * parseFloat(exchangeRate)) : 0;
   const childrenNum = children ? parseInt(children) : 0;
@@ -76,22 +105,39 @@ export default function TaxCalculator() {
           </div>
         </div>
 
-        {/* 2. USD-KRW 환율 */}
+        {/* 2. 환율 — 날짜 선택 + 자동 조회 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            2. 월급여일 전날 기준 USD-KRW 마감환율
+            2. USD-KRW 마감환율
           </label>
-          <div className="relative">
-            <input
-              type="number"
-              value={exchangeRate}
-              onChange={(e) => setExchangeRate(e.target.value)}
-              placeholder="1,350"
-              step="0.01"
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A72E5]/30 focus:border-[#2A72E5]"
-            />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">KRW/USD</span>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <input
+                type="date"
+                value={rateDate}
+                onChange={(e) => setRateDate(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A72E5]/30 focus:border-[#2A72E5]"
+              />
+            </div>
+            <div className="flex-1 relative">
+              <input
+                type="number"
+                value={exchangeRate}
+                onChange={(e) => { setExchangeRate(e.target.value); setRateSource("직접 입력"); }}
+                placeholder={rateLoading ? "조회 중..." : "날짜 선택 시 자동 입력"}
+                step="0.01"
+                className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A72E5]/30 focus:border-[#2A72E5]"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">
+                {rateLoading ? "⏳" : "KRW/USD"}
+              </span>
+            </div>
           </div>
+          {rateSource && (
+            <p className={`text-xs mt-1.5 ${rateSource.includes("실패") ? "text-red-400" : "text-gray-400"}`}>
+              📌 {rateSource}
+            </p>
+          )}
         </div>
 
         {/* 3. 환산 KRW 금액 */}

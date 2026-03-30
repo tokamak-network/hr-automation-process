@@ -876,7 +876,7 @@ async def get_candidate_match(candidate_id: int):
 # HR / Payroll Endpoints
 # ══════════════════════════════════════════════════════════════════════════════
 
-from tax_calculator import simulate_annual_tax, monthly_tax_burden
+from tax_calculator import simulate_annual_tax, monthly_tax_burden, calculate_tax
 import calendar as _calendar
 from pydantic import BaseModel as _BM
 
@@ -1116,6 +1116,20 @@ async def list_hr_transactions(limit: int = 20):
 
 
 # ── Market Data (Mock) ──
+
+# ── Tax Calculator (간이세액표 기반) ──
+
+class TaxCalcRequest(BaseModel):
+    monthly_salary_krw: int
+    num_dependents: int = 1
+    num_children_8_20: int = 0
+
+@app.post("/api/hr/tax/calculate")
+async def tax_calculate(data: TaxCalcRequest):
+    """2026 간이세액표 기반 소득세 + 지방소득세 계산"""
+    result = calculate_tax(data.monthly_salary_krw, data.num_dependents, data.num_children_8_20)
+    return result
+
 
 @app.get("/api/hr/market/tokamak")
 async def tokamak_price():

@@ -44,7 +44,8 @@ DEFAULT_SEARCH_QUERIES = [
 
 def init_linkedin_db():
     """Ensure linkedin_candidates table exists."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS linkedin_candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -149,34 +150,54 @@ async def search_brave(query: str, count: int = 10) -> List[Dict]:
 
 
 async def search_fallback(query: str) -> List[Dict]:
-    """Fallback: scrape DuckDuckGo HTML results (no API key needed)."""
+    """Fallback: try DuckDuckGo HTML, then Google scrape."""
+    results = await _search_duckduckgo(query)
+    if not results:
+        results = await _search_google(query)
+    return results
+
+
+async def _search_duckduckgo(query: str) -> List[Dict]:
+    """Scrape DuckDuckGo HTML results."""
     url = "https://html.duckduckgo.com/html/"
     try:
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             resp = await client.post(url, data={"q": query}, headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
             })
-            if resp.status_code != 200:
+            if resp.status_code not in (200, 202):
                 return []
 
-            # Simple regex parsing of DuckDuckGo HTML results
             results = []
-            # Find result links
+            # Try multiple regex patterns for DuckDuckGo HTML
+            # Pattern 1: result__a + result__snippet
             links = re.findall(
                 r'<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>(.*?)</a>.*?'
                 r'<a[^>]+class="result__snippet"[^>]*>(.*?)</a>',
                 resp.text,
                 re.DOTALL
             )
+            # Pattern 2: result-link (newer DDG layout)
+            if not links:
+                links = re.findall(
+                    r'<a[^>]+href="([^"]+)"[^>]*class="[^"]*result-link[^"]*"[^>]*>(.*?)</a>.*?'
+                    r'<div[^>]*class="[^"]*result-snippet[^"]*"[^>]*>(.*?)</div>',
+                    resp.text,
+                    re.DOTALL
+                )
+            # Pattern 3: generic anchor + uddg param
+            if not links:
+                for m in re.finditer(r'<a[^>]+href="([^"]*uddg=[^"]+)"[^>]*>(.*?)</a>', resp.text, re.DOTALL):
+                    href, title = m.group(1), m.group(2)
+                    links.append((href, title, ""))
+
             for href, title, snippet in links:
-                # DuckDuckGo wraps URLs in a redirect
+                from urllib.parse import unquote
                 actual_url = href
                 url_match = re.search(r'uddg=([^&]+)', href)
                 if url_match:
-                    from urllib.parse import unquote
                     actual_url = unquote(url_match.group(1))
 
-                # Strip HTML tags
                 clean_title = re.sub(r'<[^>]+>', '', title).strip()
                 clean_snippet = re.sub(r'<[^>]+>', '', snippet).strip()
 
@@ -189,7 +210,44 @@ async def search_fallback(query: str) -> List[Dict]:
 
             return results
     except Exception as e:
-        print(f"Fallback search error: {e}")
+        print(f"DuckDuckGo search error: {e}")
+        return []
+
+
+async def _search_google(query: str) -> List[Dict]:
+    """Scrape Google search results as last resort."""
+    try:
+        encoded_q = quote_plus(query)
+        url = f"https://www.google.com/search?q={encoded_q}&num=10"
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            resp = await client.get(url, headers={
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+            })
+            if resp.status_code != 200:
+                return []
+
+            results = []
+            # Extract URLs from Google results
+            for m in re.finditer(r'<a[^>]+href="(https?://[^"]*linkedin\.com/in/[^"&]+)"', resp.text):
+                profile_url = m.group(1).split("&")[0]
+                if profile_url not in [r["url"] for r in results]:
+                    # Try to get the title nearby
+                    title_match = re.search(
+                        r'<h3[^>]*>(.*?)</h3>',
+                        resp.text[max(0, m.start()-500):m.end()+200],
+                        re.DOTALL
+                    )
+                    title = re.sub(r'<[^>]+>', '', title_match.group(1)).strip() if title_match else ""
+                    results.append({
+                        "url": profile_url,
+                        "title": title,
+                        "description": "",
+                    })
+
+            return results
+    except Exception as e:
+        print(f"Google search error: {e}")
         return []
 
 
@@ -281,7 +339,9 @@ def score_candidate(candidate: dict) -> tuple:
 
 def save_candidate(candidate: dict, score: float, source: str = "search", score_breakdown: str = "") -> bool:
     """Save candidate to database."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     try:
         # Skip if same candidate was found within last 30 days
         existing = conn.execute(
@@ -385,7 +445,8 @@ def get_linkedin_candidates(
     offset: int = 0,
 ) -> List[Dict]:
     """Get LinkedIn candidates from DB."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
 
     query = "SELECT * FROM linkedin_candidates"
@@ -403,7 +464,8 @@ def get_linkedin_candidates(
 
 def update_candidate_status(candidate_id: int, status: str, notes: str = "") -> bool:
     """Update candidate status."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
     try:
         if notes:
             conn.execute(

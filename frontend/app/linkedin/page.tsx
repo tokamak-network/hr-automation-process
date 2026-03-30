@@ -826,65 +826,28 @@ export default function LinkedInPage() {
                       className="py-2.5 px-4"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="flex gap-1">
-                        {c.status === "discovered" && (
+                      <div className="flex gap-1 items-center">
+                        {/* Quick status change dropdown */}
+                        <select
+                          value={c.status}
+                          onChange={(e) => markOutreach(c.id, e.target.value)}
+                          className="text-[10px] border border-gray-200 rounded px-1.5 py-0.5 bg-white text-gray-700 outline-none focus:border-[#2A72E5] cursor-pointer"
+                        >
+                          <option value="discovered">Discovered</option>
+                          <option value="outreach">Outreach</option>
+                          <option value="contacted">Contacted</option>
+                          <option value="responded">Responded</option>
+                          <option value="rejected">Rejected</option>
+                        </select>
+                        {/* Outreach modal button */}
+                        {(c.status === "discovered" || c.status === "outreach") && (
                           <button
                             onClick={() => openOutreachModal(c)}
                             className="text-[10px] bg-[#2A72E5] hover:bg-[#1E5FCC] px-2 py-0.5 rounded text-white"
                           >
-                            📨 Prepare Outreach
+                            📨
                           </button>
                         )}
-                        {c.status === "outreach" && (
-                          <>
-                            <button
-                              onClick={() => openOutreachModal(c)}
-                              className="text-[10px] bg-[#2A72E5] hover:bg-[#1E5FCC] px-2 py-0.5 rounded text-white"
-                            >
-                              📨 Send Message
-                            </button>
-                            <button
-                              onClick={() => markOutreach(c.id, "contacted")}
-                              className="text-[10px] bg-gray-200 hover:bg-gray-300 px-2 py-0.5 rounded text-gray-600"
-                            >
-                              Skip
-                            </button>
-                          </>
-                        )}
-                        {c.status === "contacted" && (
-                          <>
-                            <button
-                              onClick={() => markOutreach(c.id, "responded")}
-                              className="text-[10px] bg-green-500 hover:bg-green-600 px-2 py-0.5 rounded text-white"
-                            >
-                              ✅ Responded
-                            </button>
-                            <button
-                              onClick={() => markOutreach(c.id, "rejected")}
-                              className="text-[10px] bg-gray-200 hover:bg-gray-300 px-2 py-0.5 rounded text-gray-600"
-                            >
-                              ❌ No Response
-                            </button>
-                          </>
-                        )}
-                        {c.status === "responded" && (
-                          <button
-                            disabled
-                            className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-400 cursor-not-allowed"
-                          >
-                            🎯 Move to Candidate
-                          </button>
-                        )}
-                        {c.status !== "rejected" &&
-                          c.status !== "responded" &&
-                          c.status !== "contacted" && (
-                            <button
-                              onClick={() => markOutreach(c.id, "rejected")}
-                              className="text-[10px] px-2 py-0.5 rounded text-gray-400 hover:text-red-500 bg-gray-100 hover:bg-red-50 transition"
-                            >
-                              ✕
-                            </button>
-                          )}
                       </div>
                     </td>
                   </tr>

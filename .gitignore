@@ -9,3 +9,5 @@ payroll/backend/*.db
 payroll/frontend/node_modules/
 payroll/frontend/.next/
 .DS_Store
+backend/backups/
+.env

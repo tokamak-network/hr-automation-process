@@ -1,10 +1,11 @@
 import os
 import json
+import asyncio
 from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -216,11 +217,40 @@ async def mark_reviewed(candidate_id: int, request: Request):
 
 # ---- Monitor endpoints ----
 
+# Background scan state
+_scan_status = {"running": False, "last_result": None, "last_error": None, "started_at": None}
+
+@app.get("/api/monitor/scan/status")
+async def scan_status():
+    return _scan_status
+
 @app.post("/api/monitor/scan")
-async def scan_github():
+async def scan_github(background_tasks: BackgroundTasks):
     token = os.getenv("GITHUB_TOKEN", "")
     if not token:
         raise HTTPException(400, "GITHUB_TOKEN not configured")
+    if _scan_status["running"]:
+        return {"status": "already_running", "started_at": _scan_status["started_at"]}
+    _scan_status["running"] = True
+    _scan_status["started_at"] = datetime.utcnow().isoformat()
+    _scan_status["last_error"] = None
+    background_tasks.add_task(_do_scan_github, token)
+    return {"status": "started", "message": "Scan started in background. Check /api/monitor/scan/status for progress."}
+
+async def _do_scan_github(token: str):
+    try:
+        result = await asyncio.to_thread(_scan_github_sync, token)
+        _scan_status["last_result"] = result
+    except Exception as e:
+        _scan_status["last_error"] = str(e)
+    finally:
+        _scan_status["running"] = False
+
+def _scan_github_sync(token: str):
+    """Synchronous scan — runs in a separate thread via asyncio.to_thread."""
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("monitor")
 
     from github import Github
     g = Github(token)
@@ -228,11 +258,10 @@ async def scan_github():
     try:
         org = g.get_organization("tokamak-network")
     except Exception as e:
-        raise HTTPException(400, "Failed to access org: {}".format(e))
+        raise RuntimeError("Failed to access org: {}".format(e))
 
-    # Collect individual activities: list of (username, type, repo_name, url, date, details)
-    activities = []  # type: list
-    external_users = {}  # username -> last_activity_date
+    activities = []
+    external_users = {}
     repos_scanned = 0
 
     def _add_activity(login, activity_type, repo_name, url, activity_date, details=""):
@@ -246,61 +275,38 @@ async def scan_github():
     for repo in org.get_repos(sort="updated")[:30]:
         repos_scanned += 1
         repo_full = repo.full_name
-        # Stargazers with dates
         try:
             for sg in repo.get_stargazers_with_dates()[:50]:
-                user = sg.user
-                starred_at = sg.starred_at
-                _add_activity(
-                    user.login, "star", repo_full,
-                    "https://github.com/" + repo_full,
-                    starred_at, "Starred " + repo_full
-                )
+                _add_activity(sg.user.login, "star", repo_full, "https://github.com/" + repo_full, sg.starred_at, "Starred " + repo_full)
         except Exception:
             pass
-        # Forks
         try:
             for fork in repo.get_forks()[:20]:
-                _add_activity(
-                    fork.owner.login, "fork", repo_full,
-                    fork.html_url,
-                    fork.created_at, "Forked " + repo_full
-                )
+                _add_activity(fork.owner.login, "fork", repo_full, fork.html_url, fork.created_at, "Forked " + repo_full)
         except Exception:
             pass
-        # PRs
         try:
             for pr in repo.get_pulls(state="all", sort="updated", direction="desc")[:20]:
-                _add_activity(
-                    pr.user.login, "pr", repo_full,
-                    pr.html_url,
-                    pr.created_at, pr.title
-                )
+                _add_activity(pr.user.login, "pr", repo_full, pr.html_url, pr.created_at, pr.title)
         except Exception:
             pass
-        # Issues
         try:
             for issue in repo.get_issues(state="all", sort="updated", direction="desc")[:20]:
                 if not issue.pull_request:
-                    _add_activity(
-                        issue.user.login, "issue", repo_full,
-                        issue.html_url,
-                        issue.created_at, issue.title
-                    )
+                    _add_activity(issue.user.login, "issue", repo_full, issue.html_url, issue.created_at, issue.title)
         except Exception:
             pass
 
-    db = await get_db()
+    # Save to DB synchronously
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
 
-    # Save activities (dedup via UNIQUE constraint)
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger("monitor")
     logger.info("Total activities collected: %d", len(activities))
     saved_acts = 0
     for login, atype, repo_name, url, dt_str, details in activities:
         try:
-            await db.execute("""
+            conn.execute("""
                 INSERT OR IGNORE INTO monitor_activities
                 (github_username, activity_type, repo_name, activity_url, activity_date, details)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -308,47 +314,54 @@ async def scan_github():
             saved_acts += 1
         except Exception as e:
             logger.error("Failed to save activity: %s %s %s - %s", login, atype, url, e)
+    conn.commit()
     logger.info("Activities saved: %d", saved_acts)
 
-    # Analyze profiles
+    # Analyze profiles synchronously
     analyzed = 0
     for username in list(external_users.keys())[:50]:
-        profile = await analyze_github_profile(g, username)
-        if "error" in profile:
+        try:
+            user_obj = g.get_user(username)
+            repos = list(user_obj.get_repos(sort="updated")[:10])
+            langs = {}
+            for r in repos:
+                if r.language:
+                    langs[r.language] = langs.get(r.language, 0) + 1
+
+            interest = min(10, 3 + len([r for r in repos if r.language in {"Solidity", "TypeScript", "Rust"}]))
+            tech_skill = min(10, 2 + user_obj.public_repos // 5 + user_obj.followers // 10)
+            activity = min(10, 3 + len(repos) // 2)
+            eco_rel = 5 if any(l in langs for l in ["Solidity", "Rust", "TypeScript"]) else 3
+
+            scores = {
+                "tokamak_interest": interest,
+                "technical_skill": tech_skill,
+                "activity_level": activity,
+                "ecosystem_relevance": eco_rel,
+            }
+
+            last_active = external_users.get(username, datetime.utcnow().isoformat())
+            recent_repos = [{"name": r.name, "language": r.language, "stars": r.stargazers_count} for r in repos]
+
+            conn.execute("""
+                INSERT INTO monitor_candidates (github_username, profile_url, bio, public_repos, followers, languages, contributions, scores, last_scanned)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(github_username) DO UPDATE SET
+                    bio=excluded.bio, public_repos=excluded.public_repos, followers=excluded.followers,
+                    languages=excluded.languages, scores=excluded.scores, last_scanned=excluded.last_scanned
+            """, (
+                username, f"https://github.com/{username}", user_obj.bio or "",
+                user_obj.public_repos, user_obj.followers,
+                json.dumps(langs), json.dumps(recent_repos),
+                json.dumps(scores), last_active
+            ))
+            analyzed += 1
+        except Exception as e:
+            logger.error("Failed to analyze %s: %s", username, e)
             continue
 
-        langs = profile.get("languages", {})
-        interest = min(10, 3 + len([r for r in profile.get("recent_repos", []) if r.get("language") in {"Solidity", "TypeScript", "Rust"}]))
-        tech_skill = min(10, 2 + profile.get("public_repos", 0) // 5 + profile.get("followers", 0) // 10)
-        activity = min(10, 3 + len(profile.get("recent_repos", [])) // 2)
-        eco_rel = 5 if any(l in langs for l in ["Solidity", "Rust", "TypeScript"]) else 3
-
-        scores = {
-            "tokamak_interest": interest,
-            "technical_skill": tech_skill,
-            "activity_level": activity,
-            "ecosystem_relevance": eco_rel,
-        }
-
-        # last_scanned = most recent activity date for this user
-        last_active = external_users.get(username, datetime.utcnow().isoformat())
-
-        await db.execute("""
-            INSERT INTO monitor_candidates (github_username, profile_url, bio, public_repos, followers, languages, contributions, scores, last_scanned)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(github_username) DO UPDATE SET
-                bio=excluded.bio, public_repos=excluded.public_repos, followers=excluded.followers,
-                languages=excluded.languages, scores=excluded.scores, last_scanned=excluded.last_scanned
-        """, (
-            username, profile.get("profile_url", ""), profile.get("bio", ""),
-            profile.get("public_repos", 0), profile.get("followers", 0),
-            json.dumps(langs), json.dumps(profile.get("recent_repos", [])),
-            json.dumps(scores), last_active
-        ))
-        analyzed += 1
-
-    await db.commit()
-    await db.close()
+    conn.commit()
+    conn.close()
     return {"repos_scanned": repos_scanned, "external_users_found": len(external_users), "profiles_analyzed": analyzed}
 
 
@@ -604,7 +617,7 @@ async def linkedin_search(data: LinkedInSearchRequest):
         )
     # Always attach saved_ids from DB if candidates were saved
     if result.get("total_saved", 0) > 0:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=10)
         rows = conn.execute(
             "SELECT id FROM linkedin_candidates WHERE created_at >= datetime('now', '-2 minutes') ORDER BY id DESC"
         ).fetchall()
@@ -859,6 +872,264 @@ async def get_candidate_match(candidate_id: int):
     return result
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# HR / Payroll Endpoints
+# ══════════════════════════════════════════════════════════════════════════════
+
+from tax_calculator import simulate_annual_tax, monthly_tax_burden
+import calendar as _calendar
+from pydantic import BaseModel as _BM
+
+
+class HRMemberCreate(BaseModel):
+    name: str
+    github: str = ""
+    role: str
+    monthly_usdt: float
+    wallet_address: str = ""
+    contract_start: str = ""
+
+class HRMemberUpdate(BaseModel):
+    name: Optional[str] = None
+    github: Optional[str] = None
+    role: Optional[str] = None
+    monthly_usdt: Optional[float] = None
+    wallet_address: Optional[str] = None
+    contract_start: Optional[str] = None
+    is_active: Optional[int] = None
+
+class PayrollConfirm(BaseModel):
+    year: int
+    month: int
+
+
+# ── HR Members ──
+
+@app.get("/api/hr/members")
+async def list_hr_members():
+    db = await get_db()
+    rows = await db.execute("SELECT * FROM hr_members WHERE is_active=1 ORDER BY id")
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+@app.get("/api/hr/members/{member_id}")
+async def get_hr_member(member_id: int):
+    db = await get_db()
+    row = await db.execute("SELECT * FROM hr_members WHERE id=?", (member_id,))
+    member = await row.fetchone()
+    if not member:
+        await db.close()
+        raise HTTPException(404, "Member not found")
+    m = dict(member)
+    payrolls = await db.execute("SELECT * FROM payrolls WHERE member_id=? ORDER BY year DESC, month DESC", (member_id,))
+    m["payrolls"] = [dict(p) for p in await payrolls.fetchall()]
+    incentives = await db.execute("SELECT * FROM incentives WHERE member_id=? ORDER BY year DESC, quarter DESC", (member_id,))
+    m["incentives"] = [dict(i) for i in await incentives.fetchall()]
+    await db.close()
+    return m
+
+@app.post("/api/hr/members")
+async def create_hr_member(data: HRMemberCreate):
+    db = await get_db()
+    cursor = await db.execute(
+        "INSERT INTO hr_members (name, github, role, monthly_usdt, wallet_address, contract_start) VALUES (?,?,?,?,?,?)",
+        (data.name, data.github, data.role, data.monthly_usdt, data.wallet_address, data.contract_start))
+    await db.commit()
+    mid = cursor.lastrowid
+    await db.close()
+    return {"id": mid, "message": "Member created"}
+
+@app.put("/api/hr/members/{member_id}")
+async def update_hr_member(member_id: int, data: HRMemberUpdate):
+    db = await get_db()
+    row = await db.execute("SELECT * FROM hr_members WHERE id=?", (member_id,))
+    if not await row.fetchone():
+        await db.close()
+        raise HTTPException(404, "Member not found")
+    updates = {k: v for k, v in data.model_dump().items() if v is not None}
+    if updates:
+        set_clause = ", ".join(f"{k}=?" for k in updates)
+        await db.execute(f"UPDATE hr_members SET {set_clause} WHERE id=?", list(updates.values()) + [member_id])
+        await db.commit()
+    await db.close()
+    return {"message": "Updated"}
+
+@app.delete("/api/hr/members/{member_id}")
+async def delete_hr_member(member_id: int):
+    db = await get_db()
+    await db.execute("UPDATE hr_members SET is_active=0 WHERE id=?", (member_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deactivated"}
+
+
+# ── Payroll ──
+
+@app.get("/api/hr/payroll")
+async def list_payroll(year: int = 2026, month: Optional[int] = None):
+    db = await get_db()
+    if month:
+        rows = await db.execute("""
+            SELECT p.*, m.name, m.role, m.wallet_address FROM payrolls p
+            JOIN hr_members m ON p.member_id = m.id
+            WHERE p.year=? AND p.month=? ORDER BY m.name
+        """, (year, month))
+    else:
+        rows = await db.execute("""
+            SELECT p.*, m.name, m.role, m.wallet_address FROM payrolls p
+            JOIN hr_members m ON p.member_id = m.id
+            WHERE p.year=? ORDER BY p.month DESC, m.name
+        """, (year,))
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+@app.post("/api/hr/payroll/confirm")
+async def confirm_payroll(data: PayrollConfirm):
+    db = await get_db()
+    await db.execute("UPDATE payrolls SET status='confirmed', confirmed_at=datetime('now') WHERE year=? AND month=? AND status='estimated'", (data.year, data.month))
+    await db.commit()
+    await db.close()
+    return {"message": "Confirmed"}
+
+@app.post("/api/hr/payroll/pay")
+async def pay_payroll(data: PayrollConfirm):
+    db = await get_db()
+    await db.execute("UPDATE payrolls SET status='paid', paid_at=datetime('now') WHERE year=? AND month=? AND status='confirmed'", (data.year, data.month))
+    await db.commit()
+    await db.close()
+    return {"message": "Marked as paid"}
+
+
+# ── Dashboard ──
+
+@app.get("/api/hr/dashboard")
+async def hr_dashboard():
+    db = await get_db()
+    year, month = 2026, 3
+    rows = await db.execute("SELECT * FROM payrolls WHERE year=? AND month=?", (year, month))
+    payrolls = [dict(r) for r in await rows.fetchall()]
+    total_usdt = sum(p["usdt_amount"] for p in payrolls)
+    total_krw = sum(p["krw_amount"] for p in payrolls)
+    total_tax = sum(p["tax_simulated"] for p in payrolls)
+
+    jaden_balance = {"usdt": 45230.50, "tokamak": 12500.0}
+
+    tx_rows = await db.execute("SELECT * FROM hr_transactions ORDER BY timestamp DESC LIMIT 5")
+    txs = [dict(r) for r in await tx_rows.fetchall()]
+
+    from datetime import date
+    today = date.today()
+    last_day = date(today.year, today.month, _calendar.monthrange(today.year, today.month)[1])
+    while last_day.weekday() >= 5:
+        last_day = last_day.replace(day=last_day.day - 1)
+    d_day = (last_day - today).days
+
+    res_row = await db.execute("SELECT SUM(reserve_tokamak) as total_tok FROM payrolls WHERE year=?", (year,))
+    res = await res_row.fetchone()
+    total_reserve_tok = res["total_tok"] or 0
+    tokamak_price = 3200
+
+    await db.close()
+    return {
+        "current_month": {"year": year, "month": month, "total_usdt": round(total_usdt, 2), "total_krw": round(total_krw), "total_tax": round(total_tax), "member_count": len(payrolls)},
+        "jaden_balance": jaden_balance,
+        "recent_transactions": txs,
+        "d_day": d_day,
+        "payday": last_day.isoformat(),
+        "reserves": {"total_tokamak": round(total_reserve_tok, 4), "krw_value": round(total_reserve_tok * tokamak_price), "tokamak_price": tokamak_price},
+    }
+
+
+# ── Tax Simulation ──
+
+@app.get("/api/hr/tax/simulate/{member_id}")
+async def tax_simulate(member_id: int, year: int = 2026):
+    db = await get_db()
+    row = await db.execute("SELECT * FROM hr_members WHERE id=?", (member_id,))
+    member = await row.fetchone()
+    if not member:
+        await db.close()
+        raise HTTPException(404, "Member not found")
+
+    p_rows = await db.execute("SELECT * FROM payrolls WHERE member_id=? AND year=? ORDER BY month", (member_id, year))
+    payrolls = [dict(p) for p in await p_rows.fetchall()]
+    total_payroll_krw = sum(p["krw_amount"] for p in payrolls)
+
+    i_rows = await db.execute("SELECT * FROM incentives WHERE member_id=? AND year=?", (member_id, year))
+    incentives = [dict(i) for i in await i_rows.fetchall()]
+    total_incentive_krw = sum(i["krw_amount"] for i in incentives)
+
+    annual_income = total_payroll_krw + total_incentive_krw
+    tax_result = simulate_annual_tax(annual_income)
+    monthly = monthly_tax_burden(annual_income)
+
+    total_reserve_tok = sum(p["reserve_tokamak"] for p in payrolls)
+    tokamak_price = 3200
+
+    await db.close()
+    return {
+        "member": dict(member),
+        "year": year,
+        "payroll_income_krw": round(total_payroll_krw),
+        "incentive_income_krw": round(total_incentive_krw),
+        "annual_income_krw": round(annual_income),
+        "tax": tax_result,
+        "monthly_burden": monthly,
+        "reserves": {"total_tokamak": round(total_reserve_tok, 4), "krw_value": round(total_reserve_tok * tokamak_price), "tokamak_price": tokamak_price},
+        "payroll_details": payrolls,
+    }
+
+
+# ── Incentives ──
+
+@app.get("/api/hr/incentives")
+async def list_incentives(year: int = 2026, quarter: Optional[int] = None):
+    db = await get_db()
+    if quarter:
+        rows = await db.execute("""
+            SELECT i.*, m.name, m.role FROM incentives i
+            JOIN hr_members m ON i.member_id = m.id
+            WHERE i.year=? AND i.quarter=? ORDER BY m.name
+        """, (year, quarter))
+    else:
+        rows = await db.execute("""
+            SELECT i.*, m.name, m.role FROM incentives i
+            JOIN hr_members m ON i.member_id = m.id
+            WHERE i.year=? ORDER BY i.quarter, m.name
+        """, (year,))
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+
+# ── Transactions ──
+
+@app.get("/api/hr/transactions")
+async def list_hr_transactions(limit: int = 20):
+    db = await get_db()
+    rows = await db.execute("SELECT * FROM hr_transactions ORDER BY timestamp DESC LIMIT ?", (limit,))
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+
+# ── Market Data (Mock) ──
+
+@app.get("/api/hr/market/tokamak")
+async def tokamak_price():
+    return {"token": "TOKAMAK", "price_krw": 3200, "source": "mock", "timestamp": datetime.now().isoformat()}
+
+@app.get("/api/hr/market/usdt")
+async def usdt_rate():
+    return {"pair": "USDT/KRW", "rate": 1352.50, "source": "mock", "timestamp": datetime.now().isoformat()}
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8001)
+    args = parser.parse_args()
+    uvicorn.run(app, host="0.0.0.0", port=args.port)

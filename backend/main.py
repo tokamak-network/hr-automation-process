@@ -1131,6 +1131,110 @@ async def tax_calculate(data: TaxCalcRequest):
     return result
 
 
+# ── 한국은행 ECOS 환율 API ──
+
+@app.get("/api/hr/exchange-rate")
+async def get_exchange_rate(date: str = ""):
+    """
+    한국은행 ECOS API에서 원/달러 종가(15:30) 조회.
+    date: YYYYMMDD 또는 YYYY-MM-DD 형식. 미입력 시 최근 영업일.
+    """
+    import httpx
+
+    ecos_key = os.getenv("ECOS_API_KEY", "")
+    if not ecos_key:
+        raise HTTPException(500, "ECOS_API_KEY not configured")
+
+    # 날짜 정리
+    if date:
+        clean_date = date.replace("-", "")
+    else:
+        # 최근 7일 범위로 조회 (주말/공휴일 대비)
+        from datetime import timedelta
+        today = datetime.now()
+        clean_date = (today - timedelta(days=7)).strftime("%Y%m%d")
+        end_date = today.strftime("%Y%m%d")
+
+    if date:
+        start = clean_date
+        end = clean_date
+    else:
+        start = clean_date
+        end = end_date
+
+    # 731Y003 / D / 0000003 = 원/달러(종가 15:30)
+    url = f"https://ecos.bok.or.kr/api/StatisticSearch/{ecos_key}/JSON/kr/1/10/731Y003/D/{start}/{end}/0000003"
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url)
+            data = resp.json()
+    except Exception as e:
+        raise HTTPException(502, f"ECOS API error: {e}")
+
+    if "StatisticSearch" not in data:
+        error_msg = data.get("RESULT", {}).get("MESSAGE", "Unknown error")
+        raise HTTPException(404, f"환율 데이터 없음: {error_msg}")
+
+    rows = data["StatisticSearch"]["row"]
+
+    if date:
+        # 특정 날짜 요청 — 해당 날짜 or 가장 가까운 이전 영업일
+        result_row = rows[-1] if rows else None
+    else:
+        # 최근 영업일
+        result_row = rows[-1] if rows else None
+
+    if not result_row:
+        raise HTTPException(404, "해당 날짜의 환율 데이터가 없습니다")
+
+    rate = float(result_row["DATA_VALUE"])
+    rate_date = result_row["TIME"]  # YYYYMMDD
+
+    return {
+        "rate": rate,
+        "date": f"{rate_date[:4]}-{rate_date[4:6]}-{rate_date[6:8]}",
+        "source": "한국은행 ECOS",
+        "item": "원/달러(종가 15:30)",
+    }
+
+
+@app.get("/api/hr/exchange-rate/range")
+async def get_exchange_rate_range(start: str, end: str):
+    """날짜 범위의 환율 조회. start/end: YYYYMMDD 또는 YYYY-MM-DD"""
+    import httpx
+
+    ecos_key = os.getenv("ECOS_API_KEY", "")
+    if not ecos_key:
+        raise HTTPException(500, "ECOS_API_KEY not configured")
+
+    s = start.replace("-", "")
+    e = end.replace("-", "")
+    url = f"https://ecos.bok.or.kr/api/StatisticSearch/{ecos_key}/JSON/kr/1/100/731Y003/D/{s}/{e}/0000003"
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url)
+            data = resp.json()
+    except Exception as ex:
+        raise HTTPException(502, f"ECOS API error: {ex}")
+
+    if "StatisticSearch" not in data:
+        return {"rates": []}
+
+    rows = data["StatisticSearch"]["row"]
+    return {
+        "rates": [
+            {
+                "date": f"{r['TIME'][:4]}-{r['TIME'][4:6]}-{r['TIME'][6:8]}",
+                "rate": float(r["DATA_VALUE"]),
+            }
+            for r in rows
+        ],
+        "source": "한국은행 ECOS",
+    }
+
+
 @app.get("/api/hr/market/tokamak")
 async def tokamak_price():
     return {"token": "TOKAMAK", "price_krw": 3200, "source": "mock", "timestamp": datetime.now().isoformat()}

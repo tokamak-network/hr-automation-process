@@ -335,8 +335,9 @@ def generate_payslip_pdf(
     _draw_cell(c, tx, net_ry, tl, net_h, ["Net service fee", "(\u24b6-\u24b7)"], _FONT_B, 9, DARK, fill=LIGHT_BLUE, align="center", bold=True)
     _draw_cell(c, tx + tl, net_ry, tv, net_h, [_fmt_int(net_usdt)], _FONT_B, 12, DARK, fill=LIGHT_BLUE, align="right", bold=True)
 
-    # ── KRW Reference ──
-    ref_y = net_ry - 18
+    # ── KRW Reference ── (positioned below Info column which is always 7 rows)
+    info_bottom = r0 - 7 * rh
+    ref_y = info_bottom - 18
     ref_w = pw - 2 * mx
     ref_rh = 22
     ref_cw = ref_w / 4

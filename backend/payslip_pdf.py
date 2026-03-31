@@ -18,7 +18,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 # ── Constants ──
 BLUE = (42/255, 114/255, 229/255)
 LIGHT_BLUE = (232/255, 240/255, 254/255)
-DARK = (0.1, 0.1, 0.1)
+DARK = (0.05, 0.05, 0.05)
 GRAY = (0.5, 0.5, 0.5)
 BORDER = (0.78, 0.78, 0.78)
 WHITE = (1, 1, 1)
@@ -86,29 +86,42 @@ def _rect(c, x, y, w, h, fill=None, stroke=BORDER):
     c.rect(x, y, w, h, fill=0, stroke=1)
 
 
-def _text(c, x, y, s, font=None, size=9, color=DARK):
-    _init_fonts()
-    c.setFont(font or _FONT, size)
-    c.setFillColorRGB(*color)
-    c.drawString(x, y, s)
-
-
-def _text_r(c, x, y, s, w, font=None, size=9, color=DARK):
+def _text(c, x, y, s, font=None, size=9, color=DARK, bold=False):
     _init_fonts()
     f = font or _FONT
-    c.setFont(f, size)
-    c.setFillColorRGB(*color)
-    tw = c.stringWidth(s, f, size)
-    c.drawString(x + w - tw, y, s)
+    if bold:
+        # Faux bold: draw text with thin stroke overlay
+        t = c.beginText(x, y)
+        t.setFont(f, size)
+        t.setFillColorRGB(*color)
+        t.setStrokeColorRGB(*color)
+        t.setTextRenderMode(2)  # fill + stroke
+        t._strokeWidth = size * 0.04
+        c.setLineWidth(size * 0.04)
+        t.textLine(s)
+        c.drawText(t)
+        # Reset
+        t2 = c.beginText(0, 0)
+        t2.setTextRenderMode(0)
+        c.drawText(t2)
+    else:
+        c.setFont(f, size)
+        c.setFillColorRGB(*color)
+        c.drawString(x, y, s)
 
 
-def _text_c(c, x, y, s, w, font=None, size=9, color=DARK):
+def _text_r(c, x, y, s, w, font=None, size=9, color=DARK, bold=False):
     _init_fonts()
     f = font or _FONT
-    c.setFont(f, size)
-    c.setFillColorRGB(*color)
     tw = c.stringWidth(s, f, size)
-    c.drawString(x + (w - tw) / 2, y, s)
+    _text(c, x + w - tw, y, s, f, size, color, bold=bold)
+
+
+def _text_c(c, x, y, s, w, font=None, size=9, color=DARK, bold=False):
+    _init_fonts()
+    f = font or _FONT
+    tw = c.stringWidth(s, f, size)
+    _text(c, x + (w - tw) / 2, y, s, f, size, color, bold=bold)
 
 
 def _wrap_text(c, s, font, size, max_width):
@@ -130,10 +143,11 @@ def _wrap_text(c, s, font, size, max_width):
     return lines if lines else [s]
 
 
-def _draw_cell(c, x, y, w, h, lines, font=None, size=9, color=DARK, fill=None, align="center", pad=6):
+def _draw_cell(c, x, y, w, h, lines, font=None, size=9, color=DARK, fill=None, align="center", pad=6, bold=False):
     """
     Draw a cell with text lines, vertically and horizontally centered.
     align: 'center', 'left', 'right'
+    bold: use faux bold (stroke + fill) for thicker text
     """
     _rect(c, x, y, w, h, fill=fill)
     _init_fonts()
@@ -142,18 +156,18 @@ def _draw_cell(c, x, y, w, h, lines, font=None, size=9, color=DARK, fill=None, a
         return
 
     line_h = size + 3
-    block_h = len(lines) * line_h
-    # Vertical center
-    start_y = y + h / 2 + block_h / 2 - size * 0.75
+    n = len(lines)
+    # Vertical center: place block midpoint at cell center
+    start_y = y + h / 2 + (n - 1) * line_h / 2 - size * 0.3
 
     for i, ln in enumerate(lines):
         ly = start_y - i * line_h
         if align == "right":
-            _text_r(c, x + pad, ly, ln, w - pad * 2, f, size, color)
+            _text_r(c, x + pad, ly, ln, w - pad * 2, f, size, color, bold=bold)
         elif align == "left":
-            _text(c, x + pad, ly, ln, f, size, color)
+            _text(c, x + pad, ly, ln, f, size, color, bold=bold)
         else:  # center
-            _text_c(c, x, ly, ln, w, f, size, color)
+            _text_c(c, x, ly, ln, w, f, size, color, bold=bold)
 
 
 # ── Main Generator ──
@@ -225,17 +239,19 @@ def generate_payslip_pdf(
     hdr_h = 26
 
     _rect(c, ix, hdr_y - hdr_h, info_w, hdr_h, fill=BLUE)
-    _draw_cell(c, ix, hdr_y - hdr_h, info_w, hdr_h, ["Information"], _FONT_B, 10, WHITE)
+    _draw_cell(c, ix, hdr_y - hdr_h, info_w, hdr_h, ["Information"], _FONT_B, 10, WHITE, bold=True)
 
-    # Service Fee header + monetary unit inside header bar top-right
+    # Monetary unit labels — above header bar, right-aligned
+    _text_r(c, fx + 4, hdr_y + 4, "Monetary unit : USDT", fee_w - 8, _FONT, 7, GRAY)
+    _text_r(c, tx + 4, hdr_y + 4, "Monetary unit : USDT", tax_w - 8, _FONT, 7, GRAY)
+
+    # Service Fee header
     _rect(c, fx, hdr_y - hdr_h, fee_w, hdr_h, fill=BLUE)
-    _draw_cell(c, fx, hdr_y - hdr_h, fee_w, hdr_h, ["Service Fee Details"], _FONT_B, 10, WHITE)
-    _text_r(c, fx + 4, hdr_y - 6, "Monetary unit : USDT", fee_w - 8, _FONT, 5.5, (0.75, 0.83, 0.95))
+    _draw_cell(c, fx, hdr_y - hdr_h, fee_w, hdr_h, ["Service Fee Details"], _FONT_B, 10, WHITE, bold=True)
 
-    # Tax header + monetary unit inside header bar top-right
+    # Tax header
     _rect(c, tx, hdr_y - hdr_h, tax_w, hdr_h, fill=BLUE)
-    _draw_cell(c, tx, hdr_y - hdr_h, tax_w, hdr_h, ["Tax Details"], _FONT_B, 10, WHITE)
-    _text_r(c, tx + 4, hdr_y - 6, "Monetary unit : USDT", tax_w - 8, _FONT, 5.5, (0.75, 0.83, 0.95))
+    _draw_cell(c, tx, hdr_y - hdr_h, tax_w, hdr_h, ["Tax Details"], _FONT_B, 10, WHITE, bold=True)
 
     # ── Row layout ──
     rh = 38
@@ -262,9 +278,9 @@ def generate_payslip_pdf(
     for i, (lbl, val) in enumerate(info_data):
         ry = r0 - (i + 1) * rh
 
-        # Label — centered horizontally and vertically, wrap if needed
-        lbl_lines = _wrap_text(c, lbl, _FONT, 8.5, il - 12)
-        _draw_cell(c, ix, ry, il, rh, lbl_lines, _FONT, 8.5, DARK, align="center")
+        # Label — bold, centered horizontally and vertically, wrap if needed
+        lbl_lines = _wrap_text(c, lbl, _FONT_B, 8.5, il - 12)
+        _draw_cell(c, ix, ry, il, rh, lbl_lines, _FONT_B, 8.5, DARK, align="center", bold=True)
 
         # Value — wrap long strings (ERC20, URL), left-aligned
         max_val_w = iv - 14
@@ -296,14 +312,13 @@ def generate_payslip_pdf(
 
         bg = BLUE if is_tot else None
         tc = WHITE if is_tot else DARK
-        font = _FONT_B if is_tot else _FONT
 
-        # Label — centered
+        # Label — always bold for categories, centered
         lbl_lines = lbl.split("\n")
-        _draw_cell(c, fx, ry, fl, h, lbl_lines, font, 9, tc, fill=bg, align="center")
+        _draw_cell(c, fx, ry, fl, h, lbl_lines, _FONT_B, 9, tc, fill=bg, align="center", bold=True)
 
         # Value — right-aligned, vertically centered
-        _draw_cell(c, fx + fl, ry, fv, h, [val], _FONT_B if is_tot else _FONT, 10, DARK, align="right")
+        _draw_cell(c, fx + fl, ry, fv, h, [val], _FONT_B, 10, DARK, align="right", bold=True)
 
     # === TAX COLUMN ===
     tax_items = [
@@ -324,17 +339,16 @@ def generate_payslip_pdf(
 
         bg = BLUE if is_tot else None
         tc = WHITE if is_tot else DARK
-        font = _FONT_B if is_tot else _FONT
 
-        _draw_cell(c, tx, ry, tl, h, [lbl], font, 9, tc, fill=bg, align="center")
-        _draw_cell(c, tx + tl, ry, tv, h, [val], _FONT_B if is_tot else _FONT, 10, DARK, align="right")
+        _draw_cell(c, tx, ry, tl, h, [lbl], _FONT_B, 9, tc, fill=bg, align="center", bold=True)
+        _draw_cell(c, tx + tl, ry, tv, h, [val], _FONT_B, 10, DARK, align="right", bold=True)
 
     # === NET SERVICE FEE ===
     net_ry = r0 - 7 * rh
     net_h = rh
 
-    _draw_cell(c, tx, net_ry, tl, net_h, ["Net service fee", "(\u24b6-\u24b7)"], _FONT_B, 9, DARK, fill=LIGHT_BLUE, align="center")
-    _draw_cell(c, tx + tl, net_ry, tv, net_h, [_fmt_int(net_usdt)], _FONT_B, 12, DARK, fill=LIGHT_BLUE, align="right")
+    _draw_cell(c, tx, net_ry, tl, net_h, ["Net service fee", "(\u24b6-\u24b7)"], _FONT_B, 9, DARK, fill=LIGHT_BLUE, align="center", bold=True)
+    _draw_cell(c, tx + tl, net_ry, tv, net_h, [_fmt_int(net_usdt)], _FONT_B, 12, DARK, fill=LIGHT_BLUE, align="right", bold=True)
 
     # ── KRW Reference ──
     ref_y = net_ry - 18
@@ -344,7 +358,7 @@ def generate_payslip_pdf(
 
     # Header
     _rect(c, mx, ref_y - ref_rh, ref_w, ref_rh, fill=BG_HEADER)
-    _draw_cell(c, mx, ref_y - ref_rh, ref_w, ref_rh, ["KRW Reference (\ucc38\uace0\uc6a9)"], _FONT_B, 8, GRAY, align="left")
+    _draw_cell(c, mx, ref_y - ref_rh, ref_w, ref_rh, ["KRW Reference (\ucc38\uace0\uc6a9)"], _FONT_B, 8, GRAY, align="left", bold=True)
 
     ref_data = [
         ("\uc801\uc6a9 \ud658\uc728 (USD-KRW)", _fmt_krw(round(exchange_rate)), "\uc138\uc561 \ube44\uc728", f"{tax_percentage}%"),
@@ -354,10 +368,10 @@ def generate_payslip_pdf(
 
     for ri, (l1, v1, l2, v2) in enumerate(ref_data):
         ry = ref_y - ref_rh - (ri + 1) * ref_rh
-        _draw_cell(c, mx, ry, ref_cw, ref_rh, [l1], _FONT, 8, GRAY, align="left")
-        _draw_cell(c, mx + ref_cw, ry, ref_cw, ref_rh, [v1], _FONT_B, 8.5, DARK, align="right")
-        _draw_cell(c, mx + ref_cw * 2, ry, ref_cw, ref_rh, [l2], _FONT, 8, GRAY, align="left")
-        _draw_cell(c, mx + ref_cw * 3, ry, ref_cw, ref_rh, [v2], _FONT_B, 8.5, DARK, align="right")
+        _draw_cell(c, mx, ry, ref_cw, ref_rh, [l1], _FONT_B, 8, GRAY, align="left", bold=True)
+        _draw_cell(c, mx + ref_cw, ry, ref_cw, ref_rh, [v1], _FONT_B, 8.5, DARK, align="right", bold=True)
+        _draw_cell(c, mx + ref_cw * 2, ry, ref_cw, ref_rh, [l2], _FONT_B, 8, GRAY, align="left", bold=True)
+        _draw_cell(c, mx + ref_cw * 3, ry, ref_cw, ref_rh, [v2], _FONT_B, 8.5, DARK, align="right", bold=True)
 
     # ── Footer ──
     fy = ref_y - ref_rh - 4 * ref_rh - 10

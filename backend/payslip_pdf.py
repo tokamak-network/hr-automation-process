@@ -242,8 +242,8 @@ def generate_payslip_pdf(
     _draw_cell(c, ix, hdr_y - hdr_h, info_w, hdr_h, ["Information"], _FONT_B, 10, WHITE, bold=True)
 
     # Monetary unit labels — above header bar, right-aligned
-    _text_r(c, fx + 4, hdr_y + 4, "Monetary unit : USDT", fee_w - 8, _FONT, 7, DARK)
-    _text_r(c, tx + 4, hdr_y + 4, "Monetary unit : USDT", tax_w - 8, _FONT, 7, DARK)
+    _text_r(c, fx + 4, hdr_y + 5, "Monetary unit : USDT", fee_w - 8, _FONT, 7.5, DARK, bold=True)
+    _text_r(c, tx + 4, hdr_y + 5, "Monetary unit : USDT", tax_w - 8, _FONT, 7.5, DARK, bold=True)
 
     # Service Fee header
     _rect(c, fx, hdr_y - hdr_h, fee_w, hdr_h, fill=BLUE)
@@ -290,51 +290,37 @@ def generate_payslip_pdf(
         else:
             # Handle multi-word wrapping for "March 01, 2026 to March 31, 2026"
             val_lines = _wrap_text(c, val, _FONT, val_sz, max_val_w) if val else [""]
-        _draw_cell(c, ix + il, ry, iv, rh, val_lines, _FONT, val_sz, DARK, align="left")
+        _draw_cell(c, ix + il, ry, iv, rh, val_lines, _FONT, val_sz, DARK, align="left", bold=True)
 
-    # === SERVICE FEE COLUMN ===
+    # === SERVICE FEE COLUMN (no empty rows) ===
     fee_items = [
         (0, 1, "Basic service fee\nfor each period", _fmt_int(service_fee_usdt), False),
         (1, 1, "Allowance paid for\nservice fee period", "-", False),
         (2, 2, "Any other additional\npayment for each period", "-", False),
-        (4, 1, "", "", False),
-        (5, 1, "\u24b6 Total", _fmt_int(service_fee_usdt), True),
+        (4, 1, "\u24b6 Total", _fmt_int(service_fee_usdt), True),
     ]
 
     for start, span, lbl, val, is_tot in fee_items:
         ry = r0 - (start + span) * rh
         h = rh * span
 
-        if not lbl and not val:
-            _rect(c, fx, ry, fee_w, h)
-            continue
-
         bg = BLUE if is_tot else None
         tc = WHITE if is_tot else DARK
 
-        # Label — always bold for categories, centered
         lbl_lines = lbl.split("\n")
         _draw_cell(c, fx, ry, fl, h, lbl_lines, _FONT_B, 9, tc, fill=bg, align="center", bold=True)
-
-        # Value — right-aligned, vertically centered
         _draw_cell(c, fx + fl, ry, fv, h, [val], _FONT_B, 10, DARK, align="right", bold=True)
 
-    # === TAX COLUMN ===
+    # === TAX COLUMN (no empty rows) ===
     tax_items = [
         (0, 1, "Income Tax", _fmt_int(it_usdt), False),
         (1, 1, "Local Income Tax", _fmt_int(lt_usdt), False),
-        (2, 2, "", "", False),
-        (4, 1, "", "", False),
-        (5, 1, "\u24b7 Total", _fmt_int(tt_usdt), True),
+        (2, 1, "\u24b7 Total", _fmt_int(tt_usdt), True),
     ]
 
     for start, span, lbl, val, is_tot in tax_items:
         ry = r0 - (start + span) * rh
         h = rh * span
-
-        if not lbl and not val:
-            _rect(c, tx, ry, tax_w, h)
-            continue
 
         bg = BLUE if is_tot else None
         tc = WHITE if is_tot else DARK
@@ -342,8 +328,8 @@ def generate_payslip_pdf(
         _draw_cell(c, tx, ry, tl, h, [lbl], _FONT_B, 9, tc, fill=bg, align="center", bold=True)
         _draw_cell(c, tx + tl, ry, tv, h, [val], _FONT_B, 10, DARK, align="right", bold=True)
 
-    # === NET SERVICE FEE ===
-    net_ry = r0 - 7 * rh
+    # === NET SERVICE FEE (right after Tax Total) ===
+    net_ry = r0 - 4 * rh  # row 3 (after Tax Total at row 2)
     net_h = rh
 
     _draw_cell(c, tx, net_ry, tl, net_h, ["Net service fee", "(\u24b6-\u24b7)"], _FONT_B, 9, DARK, fill=LIGHT_BLUE, align="center", bold=True)

@@ -18,7 +18,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 # ── Constants ──
 BLUE = (42/255, 114/255, 229/255)
 LIGHT_BLUE = (232/255, 240/255, 254/255)
-DARK = (0.05, 0.05, 0.05)
+DARK = (0, 0, 0)
 GRAY = (0.5, 0.5, 0.5)
 BORDER = (0.78, 0.78, 0.78)
 WHITE = (1, 1, 1)
@@ -242,8 +242,8 @@ def generate_payslip_pdf(
     _draw_cell(c, ix, hdr_y - hdr_h, info_w, hdr_h, ["Information"], _FONT_B, 10, WHITE, bold=True)
 
     # Monetary unit labels — above header bar, right-aligned
-    _text_r(c, fx + 4, hdr_y + 4, "Monetary unit : USDT", fee_w - 8, _FONT, 7, GRAY)
-    _text_r(c, tx + 4, hdr_y + 4, "Monetary unit : USDT", tax_w - 8, _FONT, 7, GRAY)
+    _text_r(c, fx + 4, hdr_y + 4, "Monetary unit : USDT", fee_w - 8, _FONT, 7, DARK)
+    _text_r(c, tx + 4, hdr_y + 4, "Monetary unit : USDT", tax_w - 8, _FONT, 7, DARK)
 
     # Service Fee header
     _rect(c, fx, hdr_y - hdr_h, fee_w, hdr_h, fill=BLUE)
@@ -299,7 +299,6 @@ def generate_payslip_pdf(
         (2, 2, "Any other additional\npayment for each period", "-", False),
         (4, 1, "", "", False),
         (5, 1, "\u24b6 Total", _fmt_int(service_fee_usdt), True),
-        (6, 1, "", "", False),
     ]
 
     for start, span, lbl, val, is_tot in fee_items:

@@ -476,13 +476,13 @@ function PayslipSection({
             <div className="flex justify-between">
               <span className="text-gray-500">Tax Total ({taxPct}%, USDT 환산)</span>
               <span className="font-medium text-red-500">
-                {exchangeRate > 0 ? (selectedTax.total / exchangeRate).toFixed(2) : 0} USDT
+                {exchangeRate > 0 ? Math.ceil(selectedTax.total / exchangeRate / 10) * 10 : 0} USDT
               </span>
             </div>
             <div className="flex justify-between border-t border-gray-200 pt-1.5">
               <span className="text-gray-700 font-semibold">Net Service Fee (USDT)</span>
               <span className="font-bold text-[#2A72E5]">
-                {exchangeRate > 0 ? (serviceFeeUsdt - selectedTax.total / exchangeRate).toFixed(2) : 0} USDT
+                {exchangeRate > 0 ? serviceFeeUsdt - Math.ceil(selectedTax.total / exchangeRate / 10) * 10 : 0} USDT
               </span>
             </div>
           </div>

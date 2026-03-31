@@ -330,6 +330,10 @@ function PayslipSection({
   // Parse month → year, month
   const [pYear, pMonth] = payMonth ? payMonth.split("-").map(Number) : [0, 0];
 
+  // Format date as YYYY-MM-DD in local timezone (not UTC)
+  const fmtDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
   // Last business day calculation (for display)
   const getLastBusinessDay = (y: number, m: number) => {
     if (!y || !m) return "";
@@ -337,11 +341,11 @@ function PayslipSection({
     while (lastDay.getDay() === 0 || lastDay.getDay() === 6) {
       lastDay.setDate(lastDay.getDate() - 1);
     }
-    return lastDay.toISOString().slice(0, 10);
+    return fmtDate(lastDay);
   };
 
   const periodStart = pYear && pMonth ? `${pYear}-${String(pMonth).padStart(2, "0")}-01` : "";
-  const periodEnd = pYear && pMonth ? (() => { const d = new Date(pYear, pMonth, 0); return d.toISOString().slice(0, 10); })() : "";
+  const periodEnd = pYear && pMonth ? fmtDate(new Date(pYear, pMonth, 0)) : "";
   const paymentDate = pYear && pMonth ? getLastBusinessDay(pYear, pMonth) : "";
 
   const canDownload = contractorName.trim() && payMonth && serviceFeeUsdt > 0;

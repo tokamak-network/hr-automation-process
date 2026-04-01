@@ -49,8 +49,8 @@ export default function Dashboard() {
           <div className="text-sm text-gray-500">{fmt(jaden_balance.tokamak)} TON</div>
         </Card>
         <Card title="적립금 현황">
-          <div className="text-lg font-semibold">{fmt(reserves.total_tax_usdt || 0)} USDT</div>
-          <div className="text-sm text-gray-500">≈ ₩{fmt(reserves.total_tax_krw || 0)}</div>
+          <div className="text-lg font-semibold">₩{fmt(reserves.total_tax_krw || 0)}</div>
+          <div className="text-sm text-gray-500">≈ {fmt(reserves.total_tax_usdt || 0)} USDT</div>
         </Card>
       </div>
 

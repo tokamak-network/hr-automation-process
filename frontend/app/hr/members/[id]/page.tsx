@@ -72,21 +72,7 @@ export default function MemberDetail() {
         </table>
       </div>
 
-      {member.incentives?.length > 0 && (
-        <div className="rounded-xl p-5 bg-white border border-gray-200">
-          <h2 className="text-lg font-semibold mb-4">인센티브</h2>
-          {member.incentives.map((inc: any, i: number) => (
-            <div key={i} className="flex justify-between items-center py-2 border-t border-gray-100 first:border-0">
-              <span>{inc.year} Q{inc.quarter}</span>
-              <span className="font-semibold">{fmt(inc.tokamak_amount)} TON</span>
-              <span className="text-gray-500">≈ ₩{fmt(inc.krw_amount)}</span>
-              <span className={`text-xs px-2 py-0.5 rounded ${inc.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                {inc.status === 'paid' ? '지급' : '대기'}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* 인센티브 섹션 — 일시 중지 (2026-04-01) */}
     </div>
   );
 }

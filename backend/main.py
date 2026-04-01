@@ -1031,6 +1031,14 @@ async def hr_dashboard():
     total_reserve_tok = res["total_tok"] or 0
     tokamak_price = 3200
 
+    # 연간 세금 누적 (USDT) — 적립금
+    import math
+    tax_acc_row = await db.execute("SELECT SUM(tax_simulated) as total_tax_yr, AVG(exchange_rate) as avg_rate FROM payrolls WHERE year=?", (year,))
+    tax_acc = await tax_acc_row.fetchone()
+    total_tax_year_krw = tax_acc["total_tax_yr"] or 0
+    avg_rate = tax_acc["avg_rate"] or 1
+    total_tax_year_usdt = math.ceil(total_tax_year_krw / avg_rate / 10) * 10
+
     await db.close()
     return {
         "current_month": {"year": year, "month": month, "total_usdt": round(total_usdt, 2), "total_krw": round(total_krw), "total_tax": round(total_tax), "member_count": len(payrolls)},
@@ -1038,7 +1046,8 @@ async def hr_dashboard():
         "recent_transactions": txs,
         "d_day": d_day,
         "payday": last_day.isoformat(),
-        "reserves": {"total_tokamak": round(total_reserve_tok, 4), "krw_value": round(total_reserve_tok * tokamak_price), "tokamak_price": tokamak_price},
+        "exchange_rate": avg_rate,
+        "reserves": {"total_tax_usdt": total_tax_year_usdt, "total_tax_krw": round(total_tax_year_krw), "total_tokamak": round(total_reserve_tok, 4), "krw_value": round(total_reserve_tok * tokamak_price), "tokamak_price": tokamak_price},
     }
 
 

@@ -55,7 +55,7 @@ export default function Payroll() {
                   <th className="text-right p-3 text-gray-400">KRW 환산</th>
                   <th className="text-right p-3 text-gray-400">세금 시뮬레이션</th>
                   <th className="text-right p-3 text-gray-400">실 지급액</th>
-                  <th className="text-right p-3 text-gray-400">적립금(TON)</th>
+                  <th className="text-right p-3 text-gray-400">적립금(USDT)</th>
                   <th className="text-right p-3 text-gray-400">상태</th>
                 </tr>
               </thead>
@@ -70,7 +70,7 @@ export default function Payroll() {
                     <td className="text-right p-3">₩{fmt(p.krw_amount)}</td>
                     <td className="text-right p-3 text-amber-600">₩{fmt(p.tax_simulated)}</td>
                     <td className="text-right p-3 font-semibold">₩{fmt(p.net_pay_krw)}</td>
-                    <td className="text-right p-3 text-gray-500">{p.reserve_tokamak?.toFixed(2)}</td>
+                    <td className="text-right p-3 text-gray-500">{fmt(Math.ceil((p.tax_simulated || 0) / (p.exchange_rate || 1) / 10) * 10)}</td>
                     <td className="text-right p-3">
                       <span className={`text-xs px-2 py-0.5 rounded ${
                         p.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :

@@ -90,7 +90,7 @@ export default function Payroll() {
                     <td className="text-right p-3">₩{fmt(payrolls.reduce((s,p) => s + p.krw_amount, 0))}</td>
                     <td className="text-right p-3 text-amber-600">₩{fmt(payrolls.reduce((s,p) => s + p.tax_simulated, 0))}</td>
                     <td className="text-right p-3">₩{fmt(payrolls.reduce((s,p) => s + p.net_pay_krw, 0))}</td>
-                    <td className="text-right p-3">{payrolls.reduce((s,p) => s + (p.reserve_tokamak||0), 0).toFixed(2)}</td>
+                    <td className="text-right p-3">{fmt(payrolls.reduce((s,p) => s + Math.ceil((p.tax_simulated || 0) / (p.exchange_rate || 1) / 10) * 10, 0))}</td>
                     <td></td>
                   </tr>
                 </tfoot>

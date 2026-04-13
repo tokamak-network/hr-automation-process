@@ -1202,48 +1202,63 @@ async def pay_payroll(data: PayrollConfirm):
 
 @app.get("/api/hr/dashboard")
 async def hr_dashboard():
+    import calendar as _cal
+    import math
+    from datetime import date
+
     db = await get_db()
-    year, month = 2026, 3
+    today = date.today()
+    year, month = today.year, today.month
+
+    # 이번 달 급여 데이터
     rows = await db.execute("SELECT * FROM payrolls WHERE year=? AND month=?", (year, month))
     payrolls = [dict(r) for r in await rows.fetchall()]
     total_usdt = sum(p["usdt_amount"] for p in payrolls)
     total_krw = sum(p["krw_amount"] for p in payrolls)
     total_tax = sum(p["tax_simulated"] for p in payrolls)
 
-    jaden_balance = {"usdt": 45230.50, "tokamak": 12500.0}
+    # 데이터 없으면 재직 팀원 기준 예상치
+    if not payrolls:
+        m_rows = await db.execute("SELECT monthly_usdt FROM hr_members WHERE is_active=1")
+        members = [dict(r) for r in await m_rows.fetchall()]
+        total_usdt = sum(m["monthly_usdt"] for m in members)
+        member_count = len(members)
+    else:
+        member_count = len(payrolls)
 
+    # 최근 트랜잭션
     tx_rows = await db.execute("SELECT * FROM hr_transactions ORDER BY timestamp DESC LIMIT 5")
     txs = [dict(r) for r in await tx_rows.fetchall()]
 
-    from datetime import date
-    today = date.today()
-    last_day = date(today.year, today.month, _calendar.monthrange(today.year, today.month)[1])
+    # 급여일 (이번 달 마지막 영업일)
+    last_day = date(today.year, today.month, _cal.monthrange(today.year, today.month)[1])
     while last_day.weekday() >= 5:
         last_day = last_day.replace(day=last_day.day - 1)
-    d_day = (last_day - today).days
+    d_day = max((last_day - today).days, 0)
 
-    res_row = await db.execute("SELECT SUM(reserve_tokamak) as total_tok FROM payrolls WHERE year=?", (year,))
-    res = await res_row.fetchone()
-    total_reserve_tok = res["total_tok"] or 0
-    tokamak_price = 3200
-
-    # 연간 세금 누적 (USDT) — 적립금
-    import math
-    tax_acc_row = await db.execute("SELECT SUM(tax_simulated) as total_tax_yr, AVG(exchange_rate) as avg_rate FROM payrolls WHERE year=?", (year,))
+    # 연간 세금 누적 적립금
+    tax_acc_row = await db.execute("SELECT SUM(tax_simulated) as total_tax_yr FROM payrolls WHERE year=? AND tax_simulated > 0", (year,))
     tax_acc = await tax_acc_row.fetchone()
     total_tax_year_krw = tax_acc["total_tax_yr"] or 0
-    avg_rate = tax_acc["avg_rate"] or 1
-    total_tax_year_usdt = math.ceil(total_tax_year_krw / avg_rate / 10) * 10
+
+    rate_row = await db.execute("SELECT AVG(krw_rate) as avg_rate FROM payrolls WHERE year=? AND krw_rate > 0", (year,))
+    rate = await rate_row.fetchone()
+    avg_rate = rate["avg_rate"] or 1
+    total_tax_year_usdt = math.ceil(total_tax_year_krw / avg_rate / 10) * 10 if total_tax_year_krw > 0 else 0
+
+    # 연간 총 지급 USDT
+    annual_row = await db.execute("SELECT SUM(usdt_amount) as total FROM payrolls WHERE year=?", (year,))
+    annual = await annual_row.fetchone()
+    annual_usdt = annual["total"] or 0
 
     await db.close()
     return {
-        "current_month": {"year": year, "month": month, "total_usdt": round(total_usdt, 2), "total_krw": round(total_krw), "total_tax": round(total_tax), "member_count": len(payrolls)},
-        "jaden_balance": jaden_balance,
+        "current_month": {"year": year, "month": month, "total_usdt": round(total_usdt, 2), "total_krw": round(total_krw), "total_tax": round(total_tax), "member_count": member_count},
         "recent_transactions": txs,
         "d_day": d_day,
         "payday": last_day.isoformat(),
-        "exchange_rate": avg_rate,
-        "reserves": {"total_tax_usdt": total_tax_year_usdt, "total_tax_krw": round(total_tax_year_krw), "total_tokamak": round(total_reserve_tok, 4), "krw_value": round(total_reserve_tok * tokamak_price), "tokamak_price": tokamak_price},
+        "annual_usdt": round(annual_usdt, 2),
+        "reserves": {"total_tax_usdt": total_tax_year_usdt, "total_tax_krw": round(total_tax_year_krw)},
     }
 
 

@@ -303,15 +303,27 @@ export default function MemberDetail() {
               <tr key={p.id} className="border-t border-gray-100">
                 <td className="py-2.5">{p.year}.{String(p.month).padStart(2, "0")}</td>
                 <td className="text-right">{fmt(p.usdt_amount)}</td>
-                <td className="text-right text-gray-400">{fmt(p.krw_rate)}</td>
-                <td className="text-right">&#8361;{fmt(p.krw_amount)}</td>
+                <td className="text-right text-gray-400">{p.krw_rate ? fmt(p.krw_rate) : "-"}</td>
+                <td className="text-right">{p.krw_rate ? `\u20A9${fmt(p.krw_amount)}` : "-"}</td>
                 <td className="text-right text-amber-600">
-                  <div>&#8361;{fmt(p.tax_simulated)}</div>
-                  <div className="text-xs text-gray-400">${p.krw_rate ? fmt(p.tax_simulated / p.krw_rate) : "-"}</div>
+                  {p.krw_rate ? (
+                    <>
+                      <div>&#8361;{fmt(p.tax_simulated)}</div>
+                      <div className="text-xs text-gray-400">${fmt(p.tax_simulated / p.krw_rate)}</div>
+                    </>
+                  ) : (
+                    <div className="text-gray-300">-</div>
+                  )}
                 </td>
                 <td className="text-right font-semibold">
-                  <div>&#8361;{fmt(p.net_pay_krw)}</div>
-                  <div className="text-xs text-gray-400 font-normal">${p.krw_rate ? fmt(p.net_pay_krw / p.krw_rate) : "-"}</div>
+                  {p.krw_rate ? (
+                    <>
+                      <div>&#8361;{fmt(p.net_pay_krw)}</div>
+                      <div className="text-xs text-gray-400 font-normal">${fmt(p.net_pay_krw / p.krw_rate)}</div>
+                    </>
+                  ) : (
+                    <div>${fmt(p.usdt_amount)}</div>
+                  )}
                 </td>
                 <td className="text-right">
                   <span className={`text-xs px-2 py-0.5 rounded ${p.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : p.status === 'confirmed' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>

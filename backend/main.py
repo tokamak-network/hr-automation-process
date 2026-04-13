@@ -1262,6 +1262,67 @@ async def hr_dashboard():
     }
 
 
+# ── Settings & Wallets ──
+
+@app.get("/api/hr/settings")
+async def get_settings():
+    db = await get_db()
+    rows = await db.execute("SELECT key, value FROM hr_settings")
+    settings = {r["key"]: r["value"] for r in await rows.fetchall()}
+    await db.close()
+    return settings
+
+@app.put("/api/hr/settings")
+async def update_settings(data: dict):
+    db = await get_db()
+    for k, v in data.items():
+        await db.execute("INSERT OR REPLACE INTO hr_settings (key, value) VALUES (?,?)", (k, v))
+    await db.commit()
+    await db.close()
+    return {"message": "Updated"}
+
+@app.get("/api/hr/wallets")
+async def list_wallets():
+    db = await get_db()
+    rows = await db.execute("SELECT * FROM hr_wallets WHERE is_active=1 ORDER BY id")
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+class WalletCreate(BaseModel):
+    label: str
+    address: str
+    chain: str = "ERC-20"
+
+@app.post("/api/hr/wallets")
+async def add_wallet(data: WalletCreate):
+    db = await get_db()
+    cursor = await db.execute(
+        "INSERT INTO hr_wallets (label, address, chain, created_at) VALUES (?,?,?,datetime('now'))",
+        (data.label, data.address, data.chain))
+    await db.commit()
+    wid = cursor.lastrowid
+    await db.close()
+    return {"id": wid, "message": "Added"}
+
+@app.put("/api/hr/wallets/{wallet_id}")
+async def update_wallet(wallet_id: int, data: WalletCreate):
+    db = await get_db()
+    await db.execute("UPDATE hr_wallets SET label=?, address=?, chain=? WHERE id=?",
+                     (data.label, data.address, data.chain, wallet_id))
+    await db.commit()
+    await db.close()
+    return {"message": "Updated"}
+
+@app.delete("/api/hr/wallets/{wallet_id}")
+async def delete_wallet(wallet_id: int):
+    db = await get_db()
+    await db.execute("DELETE FROM hr_wallets WHERE id=?", (wallet_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deleted"}
+
+
 # ── Tax Simulation ──
 
 @app.get("/api/hr/tax/simulate/{member_id}")

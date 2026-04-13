@@ -1350,6 +1350,103 @@ async def delete_hr_transaction(tx_id: int):
     return {"message": "Deleted"}
 
 
+# ── Bulk Payroll History Upload (연도/월 포함 일괄 업로드) ──
+
+@app.post("/api/hr/payroll/upload")
+async def upload_payroll_history(file: UploadFile = File(...)):
+    """
+    급여이력 일괄 업로드.
+    엑셀 컬럼: 연도, 월, 이름, USDT, 환율(선택), 세금(선택)
+    환율/세금 없으면 0으로 저장, 상태는 paid.
+    """
+    import openpyxl, io
+
+    content = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb.active
+
+    db = await get_db()
+    added, updated, skipped = 0, 0, 0
+
+    import re
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row[0] or not row[2]:
+            continue
+        year = int(row[0])
+        # "1월", "01", 1 등 다양한 형식 처리
+        month_raw = str(row[1]).strip()
+        month_digits = re.sub(r"[^0-9]", "", month_raw)
+        if not month_digits:
+            continue
+        month = int(month_digits)
+        name = str(row[2]).strip()
+        usdt = float(row[3] or 0)
+        rate = float(row[4]) if len(row) > 4 and row[4] else 0
+        tax = float(row[5]) if len(row) > 5 and row[5] else 0
+
+        krw = round(usdt * rate) if rate else 0
+        net = krw - tax if krw else 0
+
+        # 이름으로 멤버 매칭
+        r = await db.execute("SELECT id FROM hr_members WHERE name=?", (name,))
+        member = await r.fetchone()
+        if not member:
+            skipped += 1
+            continue
+        mid = member["id"]
+
+        existing = await db.execute("SELECT id FROM payrolls WHERE member_id=? AND year=? AND month=?", (mid, year, month))
+        ex = await existing.fetchone()
+
+        if ex:
+            await db.execute(
+                "UPDATE payrolls SET usdt_amount=?, krw_rate=?, krw_amount=?, tax_simulated=?, net_pay_krw=?, status='paid' WHERE id=?",
+                (usdt, rate, krw, tax, net, ex["id"]))
+            updated += 1
+        else:
+            await db.execute(
+                "INSERT INTO payrolls (member_id, year, month, usdt_amount, krw_rate, krw_amount, tax_simulated, reserve_tokamak, net_pay_krw, status) VALUES (?,?,?,?,?,?,?,0,?,?)",
+                (mid, year, month, usdt, rate, krw, tax, net, "paid"))
+            added += 1
+
+    await db.commit()
+    await db.close()
+    return {"added": added, "updated": updated, "skipped": skipped, "message": f"{added}건 추가, {updated}건 업데이트, {skipped}건 스킵"}
+
+
+@app.get("/api/hr/payroll/upload-template")
+async def download_payroll_upload_template():
+    """급여이력 일괄 업로드용 템플릿 (전 팀원 x 연월)"""
+    import openpyxl, io
+    from fastapi.responses import StreamingResponse
+
+    db = await get_db()
+    rows = await db.execute("SELECT name FROM hr_members ORDER BY is_active DESC, id")
+    members = [r["name"] for r in await rows.fetchall()]
+    await db.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "급여이력"
+    ws.append(["연도", "월", "이름", "USDT", "환율", "세금(KRW)"])
+
+    # 샘플: 현재 연월 한 줄씩
+    from datetime import datetime as dt
+    now = dt.now()
+    for m in members:
+        ws.append([now.year, now.month, m, 0, 0, 0])
+
+    for col, w in [("A",8),("B",6),("C",15),("D",12),("E",10),("F",12)]:
+        ws.column_dimensions[col].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=payroll_history_template.xlsx"})
+
+
 # ── Bulk Payroll Calculation (엑셀 업로드) ──
 
 @app.post("/api/hr/calculate/preview")

@@ -157,6 +157,7 @@ async def init_db():
         monthly_usdt REAL NOT NULL,
         wallet_address TEXT,
         contract_start TEXT,
+        contract_end TEXT,
         is_active INTEGER DEFAULT 1,
         created_at TEXT DEFAULT (datetime('now'))
     );

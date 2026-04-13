@@ -5,7 +5,7 @@ from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -896,6 +896,7 @@ class HRMemberUpdate(BaseModel):
     monthly_usdt: Optional[float] = None
     wallet_address: Optional[str] = None
     contract_start: Optional[str] = None
+    contract_end: Optional[str] = None
     is_active: Optional[int] = None
 
 class PayrollConfirm(BaseModel):
@@ -924,10 +925,87 @@ class PayrollUpdate(BaseModel):
 
 # ── HR Members ──
 
-@app.get("/api/hr/members")
-async def list_hr_members():
+@app.get("/api/hr/members/download")
+async def download_members(active: Optional[int] = None):
+    """팀원 목록 엑셀 다운로드"""
+    import openpyxl, io
+    from fastapi.responses import StreamingResponse
+
     db = await get_db()
-    rows = await db.execute("SELECT * FROM hr_members WHERE is_active=1 ORDER BY id")
+    if active is not None:
+        rows = await db.execute("SELECT * FROM hr_members WHERE is_active=? ORDER BY id", (active,))
+    else:
+        rows = await db.execute("SELECT * FROM hr_members ORDER BY id")
+    members = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "팀원"
+    ws.append(["이름", "GitHub", "직책", "월급(USDT)", "지갑주소", "계약시작일", "퇴직일", "상태"])
+    for m in members:
+        ws.append([m["name"], m["github"], m["role"], m["monthly_usdt"], m["wallet_address"], m["contract_start"], m.get("contract_end", ""), "재직" if m["is_active"] else "퇴직"])
+    for col in ["A","B","C","D","E","F","G","H"]:
+        ws.column_dimensions[col].width = 15
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    label = "active" if active == 1 else "retired" if active == 0 else "all"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=members_{label}.xlsx"})
+
+
+@app.post("/api/hr/members/upload")
+async def upload_members(file: UploadFile = File(...)):
+    """팀원 엑셀 업로드 (신규 추가 또는 기존 업데이트)"""
+    import openpyxl, io
+
+    content = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb.active
+
+    db = await get_db()
+    added, updated = 0, 0
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row[0]:
+            continue
+        name = str(row[0]).strip()
+        github = str(row[1] or "").strip()
+        role = str(row[2] or "").strip()
+        monthly_usdt = float(row[3] or 0)
+        wallet = str(row[4] or "").strip()
+        contract_start = str(row[5] or "").strip()
+        contract_end = str(row[6] or "").strip() if len(row) > 6 else ""
+        status = str(row[7] or "재직").strip() if len(row) > 7 else "재직"
+        is_active = 0 if status == "퇴직" else 1
+
+        existing = await db.execute("SELECT id FROM hr_members WHERE name=?", (name,))
+        ex = await existing.fetchone()
+        if ex:
+            await db.execute(
+                "UPDATE hr_members SET github=?, role=?, monthly_usdt=?, wallet_address=?, contract_start=?, contract_end=?, is_active=? WHERE id=?",
+                (github, role, monthly_usdt, wallet, contract_start, contract_end or None, is_active, ex["id"]))
+            updated += 1
+        else:
+            await db.execute(
+                "INSERT INTO hr_members (name, github, role, monthly_usdt, wallet_address, contract_start, contract_end, is_active) VALUES (?,?,?,?,?,?,?,?)",
+                (name, github, role, monthly_usdt, wallet, contract_start, contract_end or None, is_active))
+            added += 1
+
+    await db.commit()
+    await db.close()
+    return {"added": added, "updated": updated, "message": f"{added}명 추가, {updated}명 업데이트"}
+
+
+@app.get("/api/hr/members")
+async def list_hr_members(active: Optional[int] = None):
+    db = await get_db()
+    if active is not None:
+        rows = await db.execute("SELECT * FROM hr_members WHERE is_active=? ORDER BY id", (active,))
+    else:
+        rows = await db.execute("SELECT * FROM hr_members WHERE is_active=1 ORDER BY id")
     result = [dict(r) for r in await rows.fetchall()]
     await db.close()
     return result
@@ -988,8 +1066,65 @@ async def delete_hr_member(member_id: int, permanent: bool = False):
     await db.close()
     return {"message": "Deleted" if permanent else "Deactivated"}
 
+@app.post("/api/hr/members/{member_id}/retire")
+async def retire_hr_member(member_id: int, data: dict):
+    """퇴직 처리 (is_active=0, contract_end 기록)"""
+    db = await get_db()
+    contract_end = data.get("contract_end", datetime.now().strftime("%Y-%m-%d"))
+    await db.execute("UPDATE hr_members SET is_active=0, contract_end=? WHERE id=?", (contract_end, member_id))
+    await db.commit()
+    await db.close()
+    return {"message": "퇴직 처리 완료"}
+
+@app.post("/api/hr/members/{member_id}/reinstate")
+async def reinstate_hr_member(member_id: int):
+    """복직 처리 (is_active=1, contract_end 제거)"""
+    db = await get_db()
+    await db.execute("UPDATE hr_members SET is_active=1, contract_end=NULL WHERE id=?", (member_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "복직 처리 완료"}
+
 
 # ── Payroll ──
+
+@app.get("/api/hr/payroll/download")
+async def download_payroll(year: int = 2026, month: Optional[int] = None):
+    """급여 월별 엑셀 다운로드"""
+    import openpyxl, io
+    from fastapi.responses import StreamingResponse
+
+    db = await get_db()
+    if month:
+        rows = await db.execute("""
+            SELECT p.*, m.name, m.role FROM payrolls p
+            JOIN hr_members m ON p.member_id = m.id
+            WHERE p.year=? AND p.month=? ORDER BY m.name
+        """, (year, month))
+    else:
+        rows = await db.execute("""
+            SELECT p.*, m.name, m.role FROM payrolls p
+            JOIN hr_members m ON p.member_id = m.id
+            WHERE p.year=? ORDER BY p.month, m.name
+        """, (year,))
+    data = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"{year}년 급여"
+    ws.append(["이름", "직책", "연도", "월", "USDT", "환율", "KRW", "세금(KRW)", "실지급(KRW)", "상태"])
+    for p in data:
+        ws.append([p["name"], p["role"], p["year"], p["month"], p["usdt_amount"], p["krw_rate"], p["krw_amount"], p["tax_simulated"], p["net_pay_krw"], p["status"]])
+    for col in ["A","B","C","D","E","F","G","H","I","J"]:
+        ws.column_dimensions[col].width = 14
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"payroll_{year}_{month}m.xlsx" if month else f"payroll_{year}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}"})
 
 @app.get("/api/hr/payroll")
 async def list_payroll(year: int = 2026, month: Optional[int] = None):
@@ -1184,8 +1319,155 @@ async def list_hr_transactions(limit: int = 20):
     await db.close()
     return result
 
+class TransactionCreate(BaseModel):
+    tx_hash: str = ""
+    from_address: str = ""
+    to_address: str = ""
+    amount: float
+    token: str = "USDT"
+    status: str = "confirmed"
+    timestamp: str = ""
+    note: str = ""
 
-# ── Market Data (Mock) ──
+@app.post("/api/hr/transactions")
+async def create_hr_transaction(data: TransactionCreate):
+    db = await get_db()
+    ts = data.timestamp or datetime.now().isoformat()
+    cursor = await db.execute(
+        "INSERT INTO hr_transactions (tx_hash, from_address, to_address, amount, token, status, timestamp, note) VALUES (?,?,?,?,?,?,?,?)",
+        (data.tx_hash, data.from_address, data.to_address, data.amount, data.token, data.status, ts, data.note))
+    await db.commit()
+    tid = cursor.lastrowid
+    await db.close()
+    return {"id": tid, "message": "Created"}
+
+@app.delete("/api/hr/transactions/{tx_id}")
+async def delete_hr_transaction(tx_id: int):
+    db = await get_db()
+    await db.execute("DELETE FROM hr_transactions WHERE id=?", (tx_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deleted"}
+
+
+# ── Bulk Payroll Calculation (엑셀 업로드) ──
+
+@app.post("/api/hr/calculate/preview")
+async def calculate_payroll_preview(file: UploadFile = File(...)):
+    """
+    엑셀 업로드 → 미리보기 (저장 안 함).
+    엑셀 컬럼: 이름, USDT, 환율, 부양가족수(기본1), 8-20세자녀수(기본0)
+    """
+    import openpyxl, io
+    from tax_calculator import calculate_tax
+
+    content = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb.active
+
+    results = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row[0]:
+            continue
+        name = str(row[0]).strip()
+        usdt = float(row[1] or 0)
+        rate = float(row[2] or 0)
+        dependents = int(row[3]) if len(row) > 3 and row[3] else 1
+        children = int(row[4]) if len(row) > 4 and row[4] else 0
+
+        krw = round(usdt * rate)
+        tax_result = calculate_tax(krw, dependents, children)
+        tax = tax_result["total_tax_100"]
+        net = krw - tax
+
+        results.append({
+            "name": name,
+            "usdt_amount": usdt,
+            "krw_rate": rate,
+            "krw_amount": krw,
+            "income_tax": tax_result["income_tax_100"],
+            "local_tax": tax_result["local_tax_100"],
+            "tax_total": tax,
+            "net_pay_krw": net,
+            "dependents": dependents,
+            "children": children,
+        })
+
+    return {"results": results}
+
+
+@app.post("/api/hr/calculate/save")
+async def calculate_payroll_save(data: dict):
+    """
+    미리보기 결과를 payrolls 테이블에 저장.
+    data: { year, month, status, results: [...preview results] }
+    """
+    db = await get_db()
+    year = data["year"]
+    month = data["month"]
+    status = data.get("status", "estimated")
+    saved = 0
+
+    for r in data["results"]:
+        # 이름으로 멤버 매칭
+        row = await db.execute("SELECT id FROM hr_members WHERE name=? AND is_active=1", (r["name"],))
+        member = await row.fetchone()
+        if not member:
+            continue
+        mid = member["id"]
+
+        # 기존 데이터 확인
+        existing = await db.execute("SELECT id FROM payrolls WHERE member_id=? AND year=? AND month=?", (mid, year, month))
+        ex = await existing.fetchone()
+
+        if ex:
+            await db.execute(
+                "UPDATE payrolls SET usdt_amount=?, krw_rate=?, krw_amount=?, tax_simulated=?, net_pay_krw=?, status=? WHERE id=?",
+                (r["usdt_amount"], r["krw_rate"], r["krw_amount"], r["tax_total"], r["net_pay_krw"], status, ex["id"]))
+        else:
+            await db.execute(
+                "INSERT INTO payrolls (member_id, year, month, usdt_amount, krw_rate, krw_amount, tax_simulated, reserve_tokamak, net_pay_krw, status) VALUES (?,?,?,?,?,?,?,0,?,?)",
+                (mid, year, month, r["usdt_amount"], r["krw_rate"], r["krw_amount"], r["tax_total"], r["net_pay_krw"], status))
+        saved += 1
+
+    await db.commit()
+    await db.close()
+    return {"saved": saved, "message": f"{saved}명 급여 데이터 저장 완료"}
+
+
+@app.get("/api/hr/calculate/template")
+async def download_payroll_template():
+    """급여계산용 엑셀 템플릿 다운로드"""
+    import openpyxl, io
+    from fastapi.responses import StreamingResponse
+
+    db = await get_db()
+    rows = await db.execute("SELECT name, monthly_usdt FROM hr_members WHERE is_active=1 ORDER BY id")
+    members = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "급여계산"
+    ws.append(["이름", "USDT", "환율", "부양가족수", "8-20세자녀수"])
+
+    for m in members:
+        ws.append([m["name"], m["monthly_usdt"], 0, 1, 0])
+
+    # 컬럼 너비
+    ws.column_dimensions["A"].width = 15
+    ws.column_dimensions["B"].width = 12
+    ws.column_dimensions["C"].width = 12
+    ws.column_dimensions["D"].width = 14
+    ws.column_dimensions["E"].width = 16
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=payroll_template.xlsx"})
+
 
 # ── Tax Calculator (간이세액표 기반) ──
 

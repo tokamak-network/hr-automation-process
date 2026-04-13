@@ -198,7 +198,10 @@ export default function MemberDetail() {
               </>
             ) : (
               <>
-                <h1 className="text-2xl font-bold">{member.name}</h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-bold">{member.name}</h1>
+                  {member.is_active === 0 && <span className="text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-500">퇴직</span>}
+                </div>
                 <p className="text-gray-500">{member.role} · @{member.github}</p>
               </>
             )}
@@ -222,7 +225,7 @@ export default function MemberDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className={`grid ${member.contract_end ? "grid-cols-4" : "grid-cols-3"} gap-4 mb-6`}>
         <div className="rounded-xl p-4 bg-white border border-gray-200">
           <div className="text-xs mb-1 text-gray-400">월 급여</div>
           {editing ? (
@@ -241,6 +244,12 @@ export default function MemberDetail() {
             <div className="text-xl font-bold">{member.contract_start}</div>
           )}
         </div>
+        {member.contract_end && (
+          <div className="rounded-xl p-4 bg-white border border-gray-200">
+            <div className="text-xs mb-1 text-gray-400">퇴직일</div>
+            <div className="text-xl font-bold text-gray-400">{member.contract_end}</div>
+          </div>
+        )}
         <div className="rounded-xl p-4 bg-white border border-gray-200">
           <div className="text-xs mb-1 text-gray-400">지갑 주소</div>
           {editing ? (

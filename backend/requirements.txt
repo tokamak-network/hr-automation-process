@@ -6,3 +6,5 @@ python-dotenv==1.0.1
 pydantic==2.9.2
 gitpython==3.1.43
 aiosqlite==0.20.0
+openpyxl==3.1.5
+python-multipart==0.0.20

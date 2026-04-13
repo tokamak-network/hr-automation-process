@@ -39,7 +39,7 @@ export default function MemberDetail() {
     setSaving(true);
     await fetch(`/api/hr/members/${id}`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: form.name, github: form.github, role: form.role, monthly_usdt: Number(form.monthly_usdt), wallet_address: form.wallet_address, contract_start: form.contract_start }),
+      body: JSON.stringify({ name: form.name, github: form.github, role: form.role, monthly_usdt: Number(form.monthly_usdt), wallet_address: form.wallet_address, contract_start: form.contract_start, contract_end: form.contract_end || null }),
     });
     await load(); setEditing(false); setSaving(false);
   };
@@ -225,7 +225,7 @@ export default function MemberDetail() {
         </div>
       </div>
 
-      <div className={`grid ${member.contract_end ? "grid-cols-4" : "grid-cols-3"} gap-4 mb-6`}>
+      <div className={`grid ${member.contract_end || editing ? "grid-cols-4" : "grid-cols-3"} gap-4 mb-6`}>
         <div className="rounded-xl p-4 bg-white border border-gray-200">
           <div className="text-xs mb-1 text-gray-400">월 급여</div>
           {editing ? (
@@ -244,10 +244,15 @@ export default function MemberDetail() {
             <div className="text-xl font-bold">{member.contract_start}</div>
           )}
         </div>
-        {member.contract_end && (
+        {(member.contract_end || editing) && (
           <div className="rounded-xl p-4 bg-white border border-gray-200">
             <div className="text-xs mb-1 text-gray-400">퇴직일</div>
-            <div className="text-xl font-bold text-gray-400">{member.contract_end}</div>
+            {editing ? (
+              <input type="date" value={form.contract_end || ""} onChange={e => setForm({ ...form, contract_end: e.target.value })}
+                className="text-xl font-bold text-gray-400 border-b-2 border-[#2A72E5] outline-none bg-transparent w-full" />
+            ) : (
+              <div className="text-xl font-bold text-gray-400">{member.contract_end}</div>
+            )}
           </div>
         )}
         <div className="rounded-xl p-4 bg-white border border-gray-200">

@@ -902,6 +902,25 @@ class PayrollConfirm(BaseModel):
     year: int
     month: int
 
+class PayrollCreate(BaseModel):
+    member_id: int
+    year: int
+    month: int
+    usdt_amount: float
+    krw_rate: float
+    krw_amount: float
+    tax_simulated: float
+    net_pay_krw: float
+    status: str = "paid"
+
+class PayrollUpdate(BaseModel):
+    usdt_amount: Optional[float] = None
+    krw_rate: Optional[float] = None
+    krw_amount: Optional[float] = None
+    tax_simulated: Optional[float] = None
+    net_pay_krw: Optional[float] = None
+    status: Optional[str] = None
+
 
 # ── HR Members ──
 
@@ -956,12 +975,18 @@ async def update_hr_member(member_id: int, data: HRMemberUpdate):
     return {"message": "Updated"}
 
 @app.delete("/api/hr/members/{member_id}")
-async def delete_hr_member(member_id: int):
+async def delete_hr_member(member_id: int, permanent: bool = False):
     db = await get_db()
-    await db.execute("UPDATE hr_members SET is_active=0 WHERE id=?", (member_id,))
+    if permanent:
+        await db.execute("DELETE FROM payrolls WHERE member_id=?", (member_id,))
+        await db.execute("DELETE FROM incentives WHERE member_id=?", (member_id,))
+        await db.execute("DELETE FROM reserves WHERE member_id=?", (member_id,))
+        await db.execute("DELETE FROM hr_members WHERE id=?", (member_id,))
+    else:
+        await db.execute("UPDATE hr_members SET is_active=0 WHERE id=?", (member_id,))
     await db.commit()
     await db.close()
-    return {"message": "Deactivated"}
+    return {"message": "Deleted" if permanent else "Deactivated"}
 
 
 # ── Payroll ──
@@ -984,6 +1009,42 @@ async def list_payroll(year: int = 2026, month: Optional[int] = None):
     result = [dict(r) for r in await rows.fetchall()]
     await db.close()
     return result
+
+@app.post("/api/hr/payroll/add")
+async def add_payroll(data: PayrollCreate):
+    db = await get_db()
+    existing = await db.execute(
+        "SELECT id FROM payrolls WHERE member_id=? AND year=? AND month=?",
+        (data.member_id, data.year, data.month))
+    if await existing.fetchone():
+        await db.close()
+        raise HTTPException(400, "해당 월의 급여 이력이 이미 존재합니다")
+    cursor = await db.execute(
+        "INSERT INTO payrolls (member_id, year, month, usdt_amount, krw_rate, krw_amount, tax_simulated, reserve_tokamak, net_pay_krw, status) VALUES (?,?,?,?,?,?,?,0,?,?)",
+        (data.member_id, data.year, data.month, data.usdt_amount, data.krw_rate, data.krw_amount, data.tax_simulated, data.net_pay_krw, data.status))
+    await db.commit()
+    pid = cursor.lastrowid
+    await db.close()
+    return {"id": pid, "message": "Created"}
+
+@app.put("/api/hr/payroll/{payroll_id}")
+async def update_payroll(payroll_id: int, data: PayrollUpdate):
+    db = await get_db()
+    updates = {k: v for k, v in data.model_dump().items() if v is not None}
+    if updates:
+        set_clause = ", ".join(f"{k}=?" for k in updates)
+        await db.execute(f"UPDATE payrolls SET {set_clause} WHERE id=?", list(updates.values()) + [payroll_id])
+        await db.commit()
+    await db.close()
+    return {"message": "Updated"}
+
+@app.delete("/api/hr/payroll/{payroll_id}")
+async def delete_payroll(payroll_id: int):
+    db = await get_db()
+    await db.execute("DELETE FROM payrolls WHERE id=?", (payroll_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deleted"}
 
 @app.post("/api/hr/payroll/confirm")
 async def confirm_payroll(data: PayrollConfirm):
@@ -1207,6 +1268,47 @@ async def get_exchange_rate(date: str = ""):
         "item": "원/달러(종가 15:30)",
     }
 
+
+@app.get("/api/hr/exchange-rate/prev-day")
+async def get_exchange_rate_prev_day(date: str):
+    """
+    지급일 전날 종가 환율 조회.
+    date: YYYY-MM-DD 형식의 지급일. 전날부터 최대 7일 이전까지 탐색하여 가장 가까운 영업일 종가 반환.
+    """
+    import httpx
+    from datetime import timedelta
+
+    ecos_key = os.getenv("ECOS_API_KEY", "")
+    if not ecos_key:
+        raise HTTPException(500, "ECOS_API_KEY not configured")
+
+    pay_date = datetime.strptime(date.replace("-", ""), "%Y%m%d")
+    end = pay_date - timedelta(days=1)
+    start = end - timedelta(days=7)
+
+    url = f"https://ecos.bok.or.kr/api/StatisticSearch/{ecos_key}/JSON/kr/1/10/731Y003/D/{start.strftime('%Y%m%d')}/{end.strftime('%Y%m%d')}/0000003"
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url)
+            data = resp.json()
+    except Exception as e:
+        raise HTTPException(502, f"ECOS API error: {e}")
+
+    if "StatisticSearch" not in data:
+        raise HTTPException(404, "환율 데이터 없음")
+
+    rows = data["StatisticSearch"]["row"]
+    if not rows:
+        raise HTTPException(404, "해당 기간의 환율 데이터가 없습니다")
+
+    last = rows[-1]
+    rate_date = last["TIME"]
+    return {
+        "rate": float(last["DATA_VALUE"]),
+        "date": f"{rate_date[:4]}-{rate_date[4:6]}-{rate_date[6:8]}",
+        "source": "한국은행 ECOS (전일 종가)",
+    }
 
 @app.get("/api/hr/exchange-rate/range")
 async def get_exchange_rate_range(start: str, end: str):

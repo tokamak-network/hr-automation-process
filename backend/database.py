@@ -211,6 +211,18 @@ async def init_db():
         created_at TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (member_id) REFERENCES hr_members(id)
     );
+    CREATE TABLE IF NOT EXISTS hr_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    );
+    CREATE TABLE IF NOT EXISTS hr_wallets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL,
+        address TEXT NOT NULL,
+        chain TEXT DEFAULT 'ERC-20',
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
     """)
 
     # Seed HR members if empty

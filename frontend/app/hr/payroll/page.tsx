@@ -171,15 +171,23 @@ export default function Payroll() {
                       <div className="text-xs text-gray-400">{p.role}</div>
                     </td>
                     <td className="text-right p-3 font-semibold">{fmt(p.usdt_amount)}</td>
-                    <td className="text-right p-3 text-gray-400">{fmt(p.krw_rate)}</td>
-                    <td className="text-right p-3">{"\u20A9"}{fmt(p.krw_amount)}</td>
+                    <td className="text-right p-3 text-gray-400">{p.krw_rate ? fmt(p.krw_rate) : "-"}</td>
+                    <td className="text-right p-3">{p.krw_rate ? `${"\u20A9"}${fmt(p.krw_amount)}` : "-"}</td>
                     <td className="text-right p-3 text-amber-600">
-                      <div>{"\u20A9"}{fmt(p.tax_simulated)}</div>
-                      <div className="text-xs text-gray-400">${p.krw_rate ? fmt(p.tax_simulated / p.krw_rate) : "-"}</div>
+                      {p.krw_rate ? (
+                        <>
+                          <div>{"\u20A9"}{fmt(p.tax_simulated)}</div>
+                          <div className="text-xs text-gray-400">${fmt(p.tax_simulated / p.krw_rate)}</div>
+                        </>
+                      ) : <div className="text-gray-300">-</div>}
                     </td>
                     <td className="text-right p-3 font-semibold">
-                      <div>{"\u20A9"}{fmt(p.net_pay_krw)}</div>
-                      <div className="text-xs text-gray-400 font-normal">${p.krw_rate ? fmt(p.net_pay_krw / p.krw_rate) : "-"}</div>
+                      {p.krw_rate ? (
+                        <>
+                          <div>{"\u20A9"}{fmt(p.net_pay_krw)}</div>
+                          <div className="text-xs text-gray-400 font-normal">${fmt(p.net_pay_krw / p.krw_rate)}</div>
+                        </>
+                      ) : <div>${fmt(p.usdt_amount)}</div>}
                     </td>
                     <td className="text-right p-3">
                       <span className={`text-xs px-2 py-0.5 rounded ${

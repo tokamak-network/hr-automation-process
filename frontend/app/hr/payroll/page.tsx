@@ -17,6 +17,7 @@ export default function Payroll() {
   const [showTxForm, setShowTxForm] = useState(false);
   const [txForm, setTxForm] = useState({ tx_hash: "", from_address: "", to_address: "", amount: 0, token: "USDT", status: "confirmed", timestamp: "", note: "" });
   const [txSaving, setTxSaving] = useState(false);
+  const [historyUploading, setHistoryUploading] = useState(false);
   const [editingPayroll, setEditingPayroll] = useState<any>(null);
   const [pForm, setPForm] = useState({ usdt_amount: 0, krw_rate: 0, krw_amount: 0, tax_simulated: 0, net_pay_krw: 0, status: "estimated" });
   const [pSaving, setPSaving] = useState(false);
@@ -86,6 +87,22 @@ export default function Payroll() {
     await loadTx();
   };
 
+  const handleHistoryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setHistoryUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch("/api/hr/payroll/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      alert(data.message);
+      await loadPayrolls();
+    } catch { alert("업로드 실패"); }
+    setHistoryUploading(false);
+    e.target.value = "";
+  };
+
   const tabStyle = (t: Tab) =>
     tab === t
       ? "bg-[#2A72E5] text-white"
@@ -119,6 +136,14 @@ export default function Payroll() {
                 </button>
               ))}
             </div>
+            <button onClick={() => window.open("/api/hr/payroll/upload-template", "_blank")}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+              이력 템플릿
+            </button>
+            <label className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
+              {historyUploading ? "업로드 중..." : "이력 업로드"}
+              <input type="file" accept=".xlsx,.xls" onChange={handleHistoryUpload} className="hidden" disabled={historyUploading} />
+            </label>
             <button onClick={() => window.open(`/api/hr/payroll/download?year=${year}&month=${month}`, "_blank")}
               className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
               다운로드

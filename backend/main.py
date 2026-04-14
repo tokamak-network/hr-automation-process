@@ -1323,6 +1323,111 @@ async def delete_wallet(wallet_id: int):
     return {"message": "Deleted"}
 
 
+# ── Etherscan Transaction Sync ──
+
+USDT_CONTRACT = "0xdAC17F958D2ee523a2206206994597C13D831ec7".lower()
+
+@app.post("/api/hr/transactions/sync")
+async def sync_etherscan_transactions():
+    """등록된 지갑 주소에서 Etherscan API로 ERC-20 트랜잭션 동기화"""
+    import httpx
+
+    api_key = os.getenv("ETHERSCAN_API_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "ETHERSCAN_API_KEY not configured")
+
+    db = await get_db()
+
+    # 등록된 지갑 조회
+    w_rows = await db.execute("SELECT * FROM hr_wallets WHERE is_active=1")
+    wallets = [dict(r) for r in await w_rows.fetchall()]
+    if not wallets:
+        await db.close()
+        raise HTTPException(400, "등록된 지갑이 없습니다. 설정에서 지갑을 먼저 추가하세요.")
+
+    # 기존 tx_hash 목록 (중복 방지)
+    existing_rows = await db.execute("SELECT tx_hash FROM hr_transactions WHERE tx_hash IS NOT NULL AND tx_hash != ''")
+    existing_hashes = set(r["tx_hash"] for r in await existing_rows.fetchall())
+
+    added = 0
+    errors = []
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        for wallet in wallets:
+            address = wallet["address"]
+            url = (
+                f"https://api.etherscan.io/api"
+                f"?module=account&action=tokentx"
+                f"&address={address}"
+                f"&startblock=0&endblock=99999999"
+                f"&sort=desc&apikey={api_key}"
+            )
+            try:
+                resp = await client.get(url)
+                data = resp.json()
+
+                if data.get("status") != "1" or not data.get("result"):
+                    continue
+
+                for tx in data["result"]:
+                    tx_hash = tx["hash"]
+                    if tx_hash in existing_hashes:
+                        continue
+
+                    # USDT 필터 (원하면 다른 토큰도 포함 가능)
+                    token_symbol = tx.get("tokenSymbol", "")
+                    token_decimal = int(tx.get("tokenDecimal", 18))
+                    amount = int(tx.get("value", 0)) / (10 ** token_decimal)
+
+                    if amount <= 0:
+                        continue
+
+                    from_addr = tx["from"].lower()
+                    to_addr = tx["to"].lower()
+                    wallet_lower = address.lower()
+
+                    # 방향 판별
+                    direction = "in" if to_addr == wallet_lower else "out"
+                    ts = datetime.utcfromtimestamp(int(tx["timeStamp"])).isoformat() + "Z"
+
+                    note = f"{wallet['label']} {'입금' if direction == 'in' else '출금'}"
+
+                    await db.execute(
+                        "INSERT INTO hr_transactions (tx_hash, from_address, to_address, amount, token, status, timestamp, note) VALUES (?,?,?,?,?,?,?,?)",
+                        (tx_hash, tx["from"], tx["to"], round(amount, 2), token_symbol, "confirmed", ts, note))
+                    existing_hashes.add(tx_hash)
+                    added += 1
+
+            except Exception as e:
+                errors.append(f"{wallet['label']}: {str(e)}")
+
+    await db.commit()
+    await db.close()
+
+    msg = f"{added}건 동기화 완료"
+    if errors:
+        msg += f" (오류: {', '.join(errors)})"
+    return {"added": added, "errors": errors, "message": msg}
+
+
+@app.get("/api/hr/transactions/sync-status")
+async def etherscan_sync_status():
+    """동기화 가능 여부 확인"""
+    api_key = os.getenv("ETHERSCAN_API_KEY", "")
+    db = await get_db()
+    w_rows = await db.execute("SELECT COUNT(*) as cnt FROM hr_wallets WHERE is_active=1")
+    wallet_count = (await w_rows.fetchone())["cnt"]
+    tx_rows = await db.execute("SELECT COUNT(*) as cnt FROM hr_transactions")
+    tx_count = (await tx_rows.fetchone())["cnt"]
+    await db.close()
+    return {
+        "api_key_set": bool(api_key),
+        "wallet_count": wallet_count,
+        "transaction_count": tx_count,
+        "ready": bool(api_key) and wallet_count > 0,
+    }
+
+
 # ── Tax Simulation ──
 
 @app.get("/api/hr/tax/simulate/{member_id}")

@@ -1995,6 +1995,71 @@ class PayslipRequest(BaseModel):
     total_tax_krw: int
     tax_percentage: int = 100
 
+@app.get("/api/hr/generate-payslip")
+async def generate_payslip_from_payroll(member_id: int, year: int, month: int):
+    """급여 데이터 기반 Payslip PDF 자동 생성"""
+    from fastapi.responses import Response
+    from payslip_pdf import generate_payslip_pdf
+    from tax_calculator import calculate_tax
+
+    db = await get_db()
+    # 멤버 정보
+    m_row = await db.execute("SELECT * FROM hr_members WHERE id=?", (member_id,))
+    member = await m_row.fetchone()
+    if not member:
+        await db.close()
+        raise HTTPException(404, "Member not found")
+
+    # 급여 데이터
+    p_row = await db.execute("SELECT * FROM payrolls WHERE member_id=? AND year=? AND month=?", (member_id, year, month))
+    payroll = await p_row.fetchone()
+    if not payroll:
+        await db.close()
+        raise HTTPException(404, "Payroll not found")
+
+    # 지갑 주소 (첫 번째)
+    w_row = await db.execute("SELECT address FROM member_wallets WHERE member_id=? LIMIT 1", (member_id,))
+    wallet = await w_row.fetchone()
+    erc20_address = wallet["address"] if wallet else member["wallet_address"] or ""
+
+    await db.close()
+
+    p = dict(payroll)
+    rate = p["krw_rate"] or 0
+    krw = p["krw_amount"] or 0
+
+    # 세금 분리 (소득세/지방소득세)
+    if rate > 0 and krw > 0:
+        tax_detail = calculate_tax(int(krw))
+        income_tax = tax_detail["income_tax_100"]
+        local_tax = tax_detail["local_tax_100"]
+        total_tax = tax_detail["total_tax_100"]
+    else:
+        income_tax = 0
+        local_tax = 0
+        total_tax = int(p["tax_simulated"] or 0)
+
+    pdf_bytes = generate_payslip_pdf(
+        contractor_name=member["name"],
+        erc20_address=erc20_address,
+        transaction_url="",
+        payment_year=year,
+        payment_month=month,
+        service_fee_usdt=p["usdt_amount"],
+        exchange_rate=rate,
+        income_tax_krw=income_tax,
+        local_tax_krw=local_tax,
+        total_tax_krw=total_tax,
+        tax_percentage=100,
+    )
+
+    filename = f"payslip_{member['name']}_{year}{str(month).zfill(2)}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
 @app.post("/api/hr/payslip/pdf")
 async def generate_payslip(data: PayslipRequest):
     from fastapi.responses import Response

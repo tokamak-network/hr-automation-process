@@ -8,3 +8,4 @@ gitpython==3.1.43
 aiosqlite==0.20.0
 openpyxl==3.1.5
 python-multipart==0.0.20
+reportlab==4.4.10

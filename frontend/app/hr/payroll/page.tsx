@@ -18,6 +18,8 @@ export default function Payroll() {
   const [txForm, setTxForm] = useState({ tx_hash: "", from_address: "", to_address: "", amount: 0, token: "USDT", status: "confirmed", timestamp: "", note: "" });
   const [txSaving, setTxSaving] = useState(false);
   const [historyUploading, setHistoryUploading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<any>(null);
   const [editingPayroll, setEditingPayroll] = useState<any>(null);
   const [pForm, setPForm] = useState({ usdt_amount: 0, krw_rate: 0, krw_amount: 0, tax_simulated: 0, net_pay_krw: 0, status: "estimated" });
   const [pSaving, setPSaving] = useState(false);
@@ -26,7 +28,7 @@ export default function Payroll() {
   const loadTx = () => fetch("/api/hr/transactions").then(r => r.json()).then(setTransactions).catch(() => {});
 
   useEffect(() => { loadPayrolls(); }, [year, month]);
-  useEffect(() => { loadTx(); }, []);
+  useEffect(() => { loadTx(); fetch("/api/hr/transactions/sync-status").then(r => r.json()).then(setSyncStatus).catch(() => {}); }, []);
 
   const startEditPayroll = (p: any) => {
     setPForm({ usdt_amount: p.usdt_amount, krw_rate: p.krw_rate, krw_amount: p.krw_amount, tax_simulated: p.tax_simulated, net_pay_krw: p.net_pay_krw, status: p.status });
@@ -101,6 +103,19 @@ export default function Payroll() {
     } catch { alert("업로드 실패"); }
     setHistoryUploading(false);
     e.target.value = "";
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/hr/transactions/sync", { method: "POST" });
+      const data = await res.json();
+      alert(data.message);
+      await loadTx();
+      const st = await fetch("/api/hr/transactions/sync-status").then(r => r.json());
+      setSyncStatus(st);
+    } catch { alert("동기화 실패"); }
+    setSyncing(false);
   };
 
   const tabStyle = (t: Tab) =>
@@ -228,11 +243,25 @@ export default function Payroll() {
 
       {tab === "transactions" && (
         <div>
-          <div className="flex justify-end mb-4">
-            <button onClick={() => setShowTxForm(true)}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC]">
-              + 트랜잭션 추가
-            </button>
+          <div className="flex justify-between items-center mb-4">
+            <div className="text-xs text-gray-400">
+              {syncStatus?.ready
+                ? `지갑 ${syncStatus.wallet_count}개 등록 · ${syncStatus.transaction_count}건 기록`
+                : !syncStatus?.api_key_set
+                  ? "Etherscan API Key를 .env에 설정하세요"
+                  : "설정에서 지갑을 등록하세요"
+              }
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleSync} disabled={syncing || !syncStatus?.ready}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50">
+                {syncing ? "동기화 중..." : "Etherscan 동기화"}
+              </button>
+              <button onClick={() => setShowTxForm(true)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC]">
+                + 수동 추가
+              </button>
+            </div>
           </div>
           <div className="rounded-xl overflow-hidden bg-white border border-gray-200">
             <table className="w-full text-sm">

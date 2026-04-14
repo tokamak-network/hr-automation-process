@@ -1356,10 +1356,11 @@ async def sync_etherscan_transactions():
         for wallet in wallets:
             address = wallet["address"]
             url = (
-                f"https://api.etherscan.io/api"
-                f"?module=account&action=tokentx"
+                f"https://api.etherscan.io/v2/api"
+                f"?chainid=1&module=account&action=tokentx"
                 f"&address={address}"
                 f"&startblock=0&endblock=99999999"
+                f"&page=1&offset=1000"
                 f"&sort=desc&apikey={api_key}"
             )
             try:

@@ -1323,6 +1323,112 @@ async def delete_wallet(wallet_id: int):
     return {"message": "Deleted"}
 
 
+# ── Expenses (경비 정산) ──
+
+class ExpenseCreate(BaseModel):
+    member_id: int
+    year: int
+    month: int
+    amount_usdt: float
+    category: str
+    description: str = ""
+    tx_hash: str = ""
+    status: str = "pending"
+    expense_date: str = ""
+
+class ExpenseUpdate(BaseModel):
+    amount_usdt: Optional[float] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    tx_hash: Optional[str] = None
+    status: Optional[str] = None
+    expense_date: Optional[str] = None
+
+@app.get("/api/hr/expenses")
+async def list_expenses(year: int = 2026, month: Optional[int] = None):
+    db = await get_db()
+    if month:
+        rows = await db.execute("""
+            SELECT e.*, m.name, m.role FROM expenses e
+            JOIN hr_members m ON e.member_id = m.id
+            WHERE e.year=? AND e.month=? ORDER BY e.expense_date DESC, m.name
+        """, (year, month))
+    else:
+        rows = await db.execute("""
+            SELECT e.*, m.name, m.role FROM expenses e
+            JOIN hr_members m ON e.member_id = m.id
+            WHERE e.year=? ORDER BY e.month DESC, e.expense_date DESC, m.name
+        """, (year,))
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+@app.post("/api/hr/expenses")
+async def create_expense(data: ExpenseCreate):
+    db = await get_db()
+    cursor = await db.execute(
+        "INSERT INTO expenses (member_id, year, month, amount_usdt, category, description, tx_hash, status, expense_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,datetime('now'))",
+        (data.member_id, data.year, data.month, data.amount_usdt, data.category, data.description, data.tx_hash, data.status, data.expense_date))
+    await db.commit()
+    eid = cursor.lastrowid
+    await db.close()
+    return {"id": eid, "message": "Created"}
+
+@app.put("/api/hr/expenses/{expense_id}")
+async def update_expense(expense_id: int, data: ExpenseUpdate):
+    db = await get_db()
+    updates = {k: v for k, v in data.model_dump().items() if v is not None}
+    if updates:
+        set_clause = ", ".join(f"{k}=?" for k in updates)
+        await db.execute(f"UPDATE expenses SET {set_clause} WHERE id=?", list(updates.values()) + [expense_id])
+        await db.commit()
+    await db.close()
+    return {"message": "Updated"}
+
+@app.delete("/api/hr/expenses/{expense_id}")
+async def delete_expense(expense_id: int):
+    db = await get_db()
+    await db.execute("DELETE FROM expenses WHERE id=?", (expense_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deleted"}
+
+@app.get("/api/hr/expenses/download")
+async def download_expenses(year: int = 2026, month: Optional[int] = None):
+    import openpyxl, io
+    from fastapi.responses import StreamingResponse
+
+    db = await get_db()
+    if month:
+        rows = await db.execute("""
+            SELECT e.*, m.name FROM expenses e JOIN hr_members m ON e.member_id = m.id
+            WHERE e.year=? AND e.month=? ORDER BY e.expense_date, m.name
+        """, (year, month))
+    else:
+        rows = await db.execute("""
+            SELECT e.*, m.name FROM expenses e JOIN hr_members m ON e.member_id = m.id
+            WHERE e.year=? ORDER BY e.month, e.expense_date, m.name
+        """, (year,))
+    data = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"{year}년 경비"
+    ws.append(["이름", "연도", "월", "금액(USDT)", "카테고리", "내용", "TX Hash", "상태", "발생일"])
+    for e in data:
+        ws.append([e["name"], e["year"], e["month"], e["amount_usdt"], e["category"], e["description"], e["tx_hash"], e["status"], e["expense_date"]])
+    for col in ["A","B","C","D","E","F","G","H","I"]:
+        ws.column_dimensions[col].width = 14
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"expenses_{year}_{month}m.xlsx" if month else f"expenses_{year}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}"})
+
+
 # ── Member Wallets ──
 
 @app.get("/api/hr/members/{member_id}/wallets")

@@ -220,6 +220,20 @@ async def init_db():
         created_at TEXT,
         FOREIGN KEY (member_id) REFERENCES hr_members(id)
     );
+    CREATE TABLE IF NOT EXISTS expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        member_id INTEGER NOT NULL,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL,
+        amount_usdt REAL NOT NULL,
+        category TEXT NOT NULL,
+        description TEXT,
+        tx_hash TEXT,
+        status TEXT DEFAULT 'pending',
+        expense_date TEXT,
+        created_at TEXT,
+        FOREIGN KEY (member_id) REFERENCES hr_members(id)
+    );
     CREATE TABLE IF NOT EXISTS hr_settings (
         key TEXT PRIMARY KEY,
         value TEXT

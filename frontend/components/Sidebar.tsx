@@ -18,6 +18,7 @@ const sections = [
       { href: "/hr/dashboard", label: "대시보드", icon: "📊" },
       { href: "/hr/members", label: "팀원 관리", icon: "👤" },
       { href: "/hr/payroll", label: "급여 관리", icon: "💰" },
+      { href: "/hr/expenses", label: "경비 정산", icon: "🧾" },
       { href: "/hr/calculate", label: "급여 계산", icon: "📋" },
       { href: "/hr/tax", label: "세금 시뮬레이션", icon: "🧮" },
       { href: "/hr/settings", label: "설정", icon: "⚙️" },

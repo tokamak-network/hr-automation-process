@@ -187,6 +187,7 @@ export default function Payroll() {
                   <th className="text-right p-3 text-gray-400">세금 (KRW/USD)</th>
                   <th className="text-right p-3 text-gray-400">실지급 (KRW/USD)</th>
                   <th className="text-right p-3 text-gray-400">상태</th>
+                  <th className="text-center p-3 text-gray-400">Payslip</th>
                   <th className="text-right p-3 text-gray-400"></th>
                 </tr>
               </thead>
@@ -224,6 +225,18 @@ export default function Payroll() {
                         {p.status === 'paid' ? '지급완료' : p.status === 'confirmed' ? '확정' : '예상'}
                       </span>
                     </td>
+                    <td className="text-center p-3">
+                      <button
+                        onClick={() => window.open(`/api/hr/generate-payslip?member_id=${p.member_id}&year=${p.year}&month=${p.month}`, "_blank")}
+                        disabled={p.status === "estimated"}
+                        className={`text-xs px-2 py-1 rounded font-medium ${
+                          p.status === "estimated"
+                            ? "bg-gray-100 text-gray-300 cursor-not-allowed"
+                            : "bg-[#2A72E5] text-white hover:bg-[#1E5FCC]"
+                        }`}>
+                        PDF
+                      </button>
+                    </td>
                     <td className="text-right p-3">
                       <button onClick={() => startEditPayroll(p)} className="text-xs text-blue-500 hover:underline mr-2">수정</button>
                       <button onClick={() => handlePayrollDelete(p.id)} className="text-xs text-red-500 hover:underline">삭제</button>
@@ -231,7 +244,7 @@ export default function Payroll() {
                   </tr>
                 ))}
                 {payrolls.length === 0 && (
-                  <tr><td colSpan={8} className="py-8 text-center text-gray-400">해당 월의 급여 데이터가 없습니다</td></tr>
+                  <tr><td colSpan={9} className="py-8 text-center text-gray-400">해당 월의 급여 데이터가 없습니다</td></tr>
                 )}
               </tbody>
               {payrolls.length > 0 && (
@@ -243,6 +256,7 @@ export default function Payroll() {
                     <td className="text-right p-3">{"\u20A9"}{fmt(payrolls.reduce((s: number,p: any) => s + p.krw_amount, 0))}</td>
                     <td className="text-right p-3 text-amber-600">{"\u20A9"}{fmt(payrolls.reduce((s: number,p: any) => s + p.tax_simulated, 0))}</td>
                     <td className="text-right p-3">{"\u20A9"}{fmt(payrolls.reduce((s: number,p: any) => s + p.net_pay_krw, 0))}</td>
+                    <td></td>
                     <td></td>
                     <td></td>
                   </tr>

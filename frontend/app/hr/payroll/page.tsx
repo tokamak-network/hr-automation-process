@@ -134,12 +134,30 @@ export default function Payroll() {
       <h1 className="text-2xl font-bold mb-1">급여 관리</h1>
       <p className="text-sm mb-6 text-gray-400">{year}년 급여 현황</p>
 
-      <div className="flex gap-2 mb-6">
-        {(["monthly", "transactions"] as Tab[]).map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-lg text-sm font-medium ${tabStyle(t)}`}>
-            {t === "monthly" ? "월별 급여" : "트랜잭션"}
-          </button>
-        ))}
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex gap-2">
+          {(["monthly", "transactions"] as Tab[]).map(t => (
+            <button key={t} onClick={() => setTab(t)} className={`px-4 py-2 rounded-lg text-sm font-medium ${tabStyle(t)}`}>
+              {t === "monthly" ? "월별 급여" : "트랜잭션"}
+            </button>
+          ))}
+        </div>
+        {tab === "monthly" && (
+          <div className="flex gap-2">
+            <button onClick={() => window.open("/api/hr/payroll/upload-template", "_blank")}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+              이력 템플릿
+            </button>
+            <label className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
+              {historyUploading ? "업로드 중..." : "이력 업로드"}
+              <input type="file" accept=".xlsx,.xls" onChange={handleHistoryUpload} className="hidden" disabled={historyUploading} />
+            </label>
+            <button onClick={() => window.open(`/api/hr/payroll/download?year=${year}&month=${month}`, "_blank")}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+              다운로드
+            </button>
+          </div>
+        )}
       </div>
 
       {tab === "monthly" && (
@@ -157,18 +175,6 @@ export default function Payroll() {
                 </button>
               ))}
             </div>
-            <button onClick={() => window.open("/api/hr/payroll/upload-template", "_blank")}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
-              이력 템플릿
-            </button>
-            <label className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
-              {historyUploading ? "업로드 중..." : "이력 업로드"}
-              <input type="file" accept=".xlsx,.xls" onChange={handleHistoryUpload} className="hidden" disabled={historyUploading} />
-            </label>
-            <button onClick={() => window.open(`/api/hr/payroll/download?year=${year}&month=${month}`, "_blank")}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
-              다운로드
-            </button>
           </div>
           <div className="rounded-xl overflow-hidden bg-white border border-gray-200">
             <table className="w-full text-sm">

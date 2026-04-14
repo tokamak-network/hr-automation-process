@@ -279,7 +279,12 @@ export default function Payroll() {
               <tbody>
                 {transactions.map((tx: any) => (
                   <tr key={tx.id} className="border-t border-gray-100">
-                    <td className="p-3 font-mono text-xs">{tx.tx_hash ? `${tx.tx_hash.slice(0,12)}...` : "-"}</td>
+                    <td className="p-3 font-mono text-xs">
+                      {tx.tx_hash ? (
+                        <a href={`https://etherscan.io/tx/${tx.tx_hash}`} target="_blank" rel="noopener noreferrer"
+                          className="text-blue-500 hover:underline">{tx.tx_hash.slice(0,12)}...</a>
+                      ) : "-"}
+                    </td>
                     <td className="p-3 text-xs text-gray-500">
                       {tx.from_address ? `${tx.from_address.slice(0,8)}...` : "?"} → {tx.to_address ? `${tx.to_address.slice(0,8)}...` : "?"}
                     </td>

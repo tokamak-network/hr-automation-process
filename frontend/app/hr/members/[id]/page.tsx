@@ -31,8 +31,15 @@ export default function MemberDetail() {
   const [autoLoading, setAutoLoading] = useState(false);
   const [rateLoading, setRateLoading] = useState(false);
 
+  // wallet states
+  const [wallets, setWallets] = useState<any[]>([]);
+  const [showWalletForm, setShowWalletForm] = useState(false);
+  const [walletForm, setWalletForm] = useState({ label: "", address: "", chain: "ERC-20" });
+  const [editingWallet, setEditingWallet] = useState<number | null>(null);
+
   const load = () => fetch(`/api/hr/members/${id}`).then(r => r.json()).then(d => { setMember(d); setForm(d); }).catch(() => {});
-  useEffect(() => { load(); }, [id]);
+  const loadWallets = () => fetch(`/api/hr/members/${id}/wallets`).then(r => r.json()).then(setWallets).catch(() => {});
+  useEffect(() => { load(); loadWallets(); }, [id]);
 
   // member info save
   const handleSave = async () => {
@@ -44,6 +51,27 @@ export default function MemberDetail() {
     await load(); setEditing(false); setSaving(false);
   };
   const handleCancel = () => { setForm(member); setEditing(false); };
+
+  // wallet CRUD
+  const handleWalletSave = async () => {
+    if (!walletForm.label.trim() || !walletForm.address.trim()) return alert("라벨과 주소를 입력하세요.");
+    if (editingWallet) {
+      await fetch(`/api/hr/members/wallets/${editingWallet}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(walletForm) });
+    } else {
+      await fetch(`/api/hr/members/${id}/wallets`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(walletForm) });
+    }
+    setShowWalletForm(false); setEditingWallet(null);
+    setWalletForm({ label: "", address: "", chain: "ERC-20" });
+    await loadWallets();
+  };
+
+  const handleWalletDelete = async (wid: number) => {
+    if (!confirm("이 지갑을 삭제하시겠습니까?")) return;
+    await fetch(`/api/hr/members/wallets/${wid}`, { method: "DELETE" });
+    await loadWallets();
+  };
 
   // pay_date change → fetch prev-day closing rate → trigger full recalc
   const handlePayDateChange = async (dateVal: string) => {
@@ -225,7 +253,7 @@ export default function MemberDetail() {
         </div>
       </div>
 
-      <div className={`grid ${member.contract_end || editing ? "grid-cols-4" : "grid-cols-3"} gap-4 mb-6`}>
+      <div className={`grid ${member.contract_end || editing ? "grid-cols-3" : "grid-cols-2"} gap-4 mb-6`}>
         <div className="rounded-xl p-4 bg-white border border-gray-200">
           <div className="text-xs mb-1 text-gray-400">월 급여</div>
           {editing ? (
@@ -255,15 +283,6 @@ export default function MemberDetail() {
             )}
           </div>
         )}
-        <div className="rounded-xl p-4 bg-white border border-gray-200">
-          <div className="text-xs mb-1 text-gray-400">지갑 주소</div>
-          {editing ? (
-            <input value={form.wallet_address} onChange={e => setForm({ ...form, wallet_address: e.target.value })}
-              className="text-sm font-mono border-b-2 border-[#2A72E5] outline-none bg-transparent w-full" placeholder="0x..." />
-          ) : (
-            <div className="text-sm font-mono truncate">{member.wallet_address}</div>
-          )}
-        </div>
       </div>
 
       {editing && (
@@ -271,6 +290,74 @@ export default function MemberDetail() {
           <div className="text-xs mb-1 text-gray-400">GitHub</div>
           <input value={form.github} onChange={e => setForm({ ...form, github: e.target.value })}
             className="text-sm font-mono border-b-2 border-[#2A72E5] outline-none bg-transparent w-full" placeholder="github-username" />
+        </div>
+      )}
+
+      {/* 지갑 관리 */}
+      <div className="rounded-xl p-5 mb-6 bg-white border border-gray-200">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold">지갑 주소</h2>
+          <button onClick={() => { setWalletForm({ label: "", address: "", chain: "ERC-20" }); setEditingWallet(null); setShowWalletForm(true); }}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC]">
+            + 지갑 추가
+          </button>
+        </div>
+        {wallets.length > 0 ? (
+          <div className="space-y-2">
+            {wallets.map((w: any) => (
+              <div key={w.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{w.label}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">{w.chain}</span>
+                  </div>
+                  <div className="text-xs font-mono text-gray-400 mt-0.5">{w.address}</div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setWalletForm({ label: w.label, address: w.address, chain: w.chain }); setEditingWallet(w.id); setShowWalletForm(true); }}
+                    className="text-xs text-blue-500 hover:underline">수정</button>
+                  <button onClick={() => handleWalletDelete(w.id)} className="text-xs text-red-500 hover:underline">삭제</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-gray-400 text-center py-4">등록된 지갑이 없습니다</div>
+        )}
+      </div>
+
+      {/* 지갑 추가/수정 모달 */}
+      {showWalletForm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => { setShowWalletForm(false); setEditingWallet(null); }}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold mb-4">{editingWallet ? "지갑 수정" : "지갑 추가"}</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">라벨</label>
+                <input value={walletForm.label} onChange={e => setWalletForm({ ...walletForm, label: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A72E5]" placeholder="예: 급여 수령용" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">주소</label>
+                <input value={walletForm.address} onChange={e => setWalletForm({ ...walletForm, address: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:border-[#2A72E5]" placeholder="0x..." />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">체인</label>
+                <select value={walletForm.chain} onChange={e => setWalletForm({ ...walletForm, chain: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A72E5]">
+                  <option value="ERC-20">ERC-20 (Ethereum)</option>
+                  <option value="Titan L2">Titan L2</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => { setShowWalletForm(false); setEditingWallet(null); }}
+                className="px-4 py-2 rounded-lg text-sm text-gray-600 border border-gray-300 hover:bg-gray-50">취소</button>
+              <button onClick={handleWalletSave}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC]">저장</button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -23,12 +23,18 @@ export default function Payroll() {
   const [editingPayroll, setEditingPayroll] = useState<any>(null);
   const [pForm, setPForm] = useState({ usdt_amount: 0, krw_rate: 0, krw_amount: 0, tax_simulated: 0, net_pay_krw: 0, status: "estimated" });
   const [pSaving, setPSaving] = useState(false);
+  const [addrMap, setAddrMap] = useState<Record<string, string>>({});
 
   const loadPayrolls = () => fetch(`/api/hr/payroll?year=${year}&month=${month}`).then(r => r.json()).then(setPayrolls).catch(() => {});
   const loadTx = () => fetch("/api/hr/transactions").then(r => r.json()).then(setTransactions).catch(() => {});
+  const resolveAddr = (addr: string) => addrMap[addr?.toLowerCase()] || (addr ? `${addr.slice(0,8)}...` : "?");
 
   useEffect(() => { loadPayrolls(); }, [year, month]);
-  useEffect(() => { loadTx(); fetch("/api/hr/transactions/sync-status").then(r => r.json()).then(setSyncStatus).catch(() => {}); }, []);
+  useEffect(() => {
+    loadTx();
+    fetch("/api/hr/transactions/sync-status").then(r => r.json()).then(setSyncStatus).catch(() => {});
+    fetch("/api/hr/address-map").then(r => r.json()).then(setAddrMap).catch(() => {});
+  }, []);
 
   const startEditPayroll = (p: any) => {
     setPForm({ usdt_amount: p.usdt_amount, krw_rate: p.krw_rate, krw_amount: p.krw_amount, tax_simulated: p.tax_simulated, net_pay_krw: p.net_pay_krw, status: p.status });
@@ -286,7 +292,7 @@ export default function Payroll() {
                       ) : "-"}
                     </td>
                     <td className="p-3 text-xs text-gray-500">
-                      {tx.from_address ? `${tx.from_address.slice(0,8)}...` : "?"} → {tx.to_address ? `${tx.to_address.slice(0,8)}...` : "?"}
+                      {resolveAddr(tx.from_address)} → {resolveAddr(tx.to_address)}
                     </td>
                     <td className="text-right p-3 font-semibold">{fmt(tx.amount)} {tx.token}</td>
                     <td className="p-3 text-xs text-gray-500">{tx.note || "-"}</td>

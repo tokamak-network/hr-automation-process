@@ -1323,6 +1323,67 @@ async def delete_wallet(wallet_id: int):
     return {"message": "Deleted"}
 
 
+# ── Member Wallets ──
+
+@app.get("/api/hr/members/{member_id}/wallets")
+async def list_member_wallets(member_id: int):
+    db = await get_db()
+    rows = await db.execute("SELECT * FROM member_wallets WHERE member_id=? ORDER BY id", (member_id,))
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+@app.post("/api/hr/members/{member_id}/wallets")
+async def add_member_wallet(member_id: int, data: WalletCreate):
+    db = await get_db()
+    cursor = await db.execute(
+        "INSERT INTO member_wallets (member_id, label, address, chain, created_at) VALUES (?,?,?,?,datetime('now'))",
+        (member_id, data.label, data.address, data.chain))
+    await db.commit()
+    wid = cursor.lastrowid
+    await db.close()
+    return {"id": wid, "message": "Added"}
+
+@app.put("/api/hr/members/wallets/{wallet_id}")
+async def update_member_wallet(wallet_id: int, data: WalletCreate):
+    db = await get_db()
+    await db.execute("UPDATE member_wallets SET label=?, address=?, chain=? WHERE id=?",
+                     (data.label, data.address, data.chain, wallet_id))
+    await db.commit()
+    await db.close()
+    return {"message": "Updated"}
+
+@app.delete("/api/hr/members/wallets/{wallet_id}")
+async def delete_member_wallet(wallet_id: int):
+    db = await get_db()
+    await db.execute("DELETE FROM member_wallets WHERE id=?", (wallet_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deleted"}
+
+@app.get("/api/hr/address-map")
+async def get_address_map():
+    """모든 지갑 주소 → 이름/라벨 매핑 (트랜잭션 표시용)"""
+    db = await get_db()
+    addr_map = {}
+
+    # 관리자 지갑 (설정)
+    rows = await db.execute("SELECT label, address FROM hr_wallets WHERE is_active=1")
+    for r in await rows.fetchall():
+        addr_map[r["address"].lower()] = r["label"]
+
+    # 팀원 지갑
+    rows = await db.execute("""
+        SELECT mw.label, mw.address, m.name FROM member_wallets mw
+        JOIN hr_members m ON mw.member_id = m.id
+    """)
+    for r in await rows.fetchall():
+        addr_map[r["address"].lower()] = f"{r['name']} ({r['label']})"
+
+    await db.close()
+    return addr_map
+
+
 # ── Etherscan Transaction Sync ──
 
 USDT_CONTRACT = "0xdAC17F958D2ee523a2206206994597C13D831ec7".lower()

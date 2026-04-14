@@ -76,7 +76,10 @@ export default function Dashboard() {
               {recent_transactions.map((tx: any, i: number) => (
                 <div key={i} className="flex justify-between items-center text-sm py-1.5 border-b border-gray-100 last:border-0">
                   <div>
-                    <span className="font-mono text-xs text-gray-400">{tx.tx_hash ? `${tx.tx_hash.slice(0, 14)}...` : "-"}</span>
+                    {tx.tx_hash ? (
+                      <a href={`https://etherscan.io/tx/${tx.tx_hash}`} target="_blank" rel="noopener noreferrer"
+                        className="font-mono text-xs text-blue-500 hover:underline">{tx.tx_hash.slice(0, 14)}...</a>
+                    ) : <span className="font-mono text-xs text-gray-400">-</span>}
                     {tx.note && <span className="ml-2 text-gray-500">{tx.note}</span>}
                   </div>
                   <div className="flex items-center gap-2">

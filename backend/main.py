@@ -1370,17 +1370,29 @@ async def sync_etherscan_transactions():
                 if data.get("status") != "1" or not data.get("result"):
                     continue
 
+                # 허용할 토큰 contract (소문자)
+                ALLOWED_CONTRACTS = {
+                    USDT_CONTRACT: "USDT",                                          # Tether USDT
+                    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": "USDC",         # USD Coin
+                    "0x2be5e8c109e2197d077d13a82daead6a9b3433c5": "WTON",         # Wrapped TON
+                }
+
                 for tx in data["result"]:
                     tx_hash = tx["hash"]
                     if tx_hash in existing_hashes:
                         continue
 
-                    # USDT 필터 (원하면 다른 토큰도 포함 가능)
-                    token_symbol = tx.get("tokenSymbol", "")
+                    # contract address로 필터 (스팸/가짜 토큰 제거)
+                    contract = tx.get("contractAddress", "").lower()
+                    if contract not in ALLOWED_CONTRACTS:
+                        continue
+
+                    token_symbol = ALLOWED_CONTRACTS[contract]
                     token_decimal = int(tx.get("tokenDecimal", 18))
                     amount = int(tx.get("value", 0)) / (10 ** token_decimal)
 
-                    if amount <= 0:
+                    # 소액 필터 (1 미만 = 더스트/스팸)
+                    if amount < 1:
                         continue
 
                     from_addr = tx["from"].lower()

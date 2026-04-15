@@ -898,6 +898,16 @@ class HRMemberUpdate(BaseModel):
     contract_start: Optional[str] = None
     contract_end: Optional[str] = None
     is_active: Optional[int] = None
+    name_kr: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    personal_email: Optional[str] = None
+    birthday: Optional[str] = None
+    education: Optional[str] = None
+    nationality: Optional[str] = None
+    is_rnd: Optional[str] = None
+    address: Optional[str] = None
+    company: Optional[str] = None
 
 class PayrollConfirm(BaseModel):
     year: int

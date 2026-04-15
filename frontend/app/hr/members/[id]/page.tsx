@@ -30,6 +30,10 @@ export default function MemberDetail() {
   const [payrollSaving, setPayrollSaving] = useState(false);
   const [autoLoading, setAutoLoading] = useState(false);
   const [rateLoading, setRateLoading] = useState(false);
+  const [tab, setTab] = useState<"payroll" | "profile">("payroll");
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [profileForm, setProfileForm] = useState<any>({});
+  const [profileSaving, setProfileSaving] = useState(false);
 
   // wallet states
   const [wallets, setWallets] = useState<any[]>([]);
@@ -37,7 +41,7 @@ export default function MemberDetail() {
   const [walletForm, setWalletForm] = useState({ label: "", address: "", chain: "ERC-20" });
   const [editingWallet, setEditingWallet] = useState<number | null>(null);
 
-  const load = () => fetch(`/api/hr/members/${id}`).then(r => r.json()).then(d => { setMember(d); setForm(d); }).catch(() => {});
+  const load = () => fetch(`/api/hr/members/${id}`).then(r => r.json()).then(d => { setMember(d); setForm(d); setProfileForm(d); }).catch(() => {});
   const loadWallets = () => fetch(`/api/hr/members/${id}/wallets`).then(r => r.json()).then(setWallets).catch(() => {});
   useEffect(() => { load(); loadWallets(); }, [id]);
 
@@ -51,6 +55,16 @@ export default function MemberDetail() {
     await load(); setEditing(false); setSaving(false);
   };
   const handleCancel = () => { setForm(member); setEditing(false); };
+
+  // profile save
+  const handleProfileSave = async () => {
+    setProfileSaving(true);
+    await fetch(`/api/hr/members/${id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name_kr: profileForm.name_kr, email: profileForm.email, phone: profileForm.phone, personal_email: profileForm.personal_email, birthday: profileForm.birthday, education: profileForm.education, nationality: profileForm.nationality, is_rnd: profileForm.is_rnd, address: profileForm.address, company: profileForm.company }),
+    });
+    await load(); setProfileEditing(false); setProfileSaving(false);
+  };
 
   // wallet CRUD
   const handleWalletSave = async () => {
@@ -253,6 +267,19 @@ export default function MemberDetail() {
         </div>
       </div>
 
+      {/* 탭 */}
+      <div className="flex gap-2 mb-6">
+        <button onClick={() => setTab("payroll")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === "payroll" ? "bg-[#2A72E5] text-white" : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"}`}>
+          급여 정보
+        </button>
+        <button onClick={() => setTab("profile")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${tab === "profile" ? "bg-[#2A72E5] text-white" : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50"}`}>
+          인적 사항
+        </button>
+      </div>
+
+      {tab === "payroll" && (<>
       <div className={`grid ${member.contract_end || editing ? "grid-cols-3" : "grid-cols-2"} gap-4 mb-6`}>
         <div className="rounded-xl p-4 bg-white border border-gray-200">
           <div className="text-xs mb-1 text-gray-400">월 급여</div>
@@ -509,6 +536,65 @@ export default function MemberDetail() {
       )}
 
       {/* 인센티브 섹션 — 일시 중지 (2026-04-01) */}
+      </>)}
+
+      {/* 인적 사항 탭 */}
+      {tab === "profile" && (
+        <div className="rounded-xl p-5 bg-white border border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">인적 사항</h2>
+            {profileEditing ? (
+              <div className="flex gap-2">
+                <button onClick={() => { setProfileForm(member); setProfileEditing(false); }}
+                  className="px-4 py-2 rounded-lg text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">취소</button>
+                <button onClick={handleProfileSave} disabled={profileSaving}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC] disabled:opacity-50">
+                  {profileSaving ? "저장 중..." : "저장"}
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => setProfileEditing(true)}
+                className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+                수정
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              { key: "name_kr", label: "한국어 이름" },
+              { key: "company", label: "소속" },
+              { key: "email", label: "회사 이메일" },
+              { key: "personal_email", label: "개인 이메일" },
+              { key: "phone", label: "휴대전화" },
+              { key: "birthday", label: "생년월일", type: "date" },
+              { key: "education", label: "학력" },
+              { key: "nationality", label: "국적" },
+              { key: "is_rnd", label: "연구개발 여부" },
+            ].map(f => (
+              <div key={f.key}>
+                <div className="text-xs text-gray-400 mb-1">{f.label}</div>
+                {profileEditing ? (
+                  <input type={f.type || "text"} value={profileForm[f.key] || ""}
+                    onChange={e => setProfileForm({ ...profileForm, [f.key]: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A72E5]" />
+                ) : (
+                  <div className="text-sm font-medium">{member[f.key] || "-"}</div>
+                )}
+              </div>
+            ))}
+            <div className="col-span-2">
+              <div className="text-xs text-gray-400 mb-1">주소</div>
+              {profileEditing ? (
+                <input value={profileForm.address || ""}
+                  onChange={e => setProfileForm({ ...profileForm, address: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A72E5]" />
+              ) : (
+                <div className="text-sm font-medium">{member.address || "-"}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

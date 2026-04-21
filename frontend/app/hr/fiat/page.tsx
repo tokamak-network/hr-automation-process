@@ -18,6 +18,7 @@ export default function FiatPage() {
   const [page, setPage] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<any>(null);
   const PAGE_SIZE = 100;
 
   const buildParams = (p?: number) => {
@@ -48,6 +49,9 @@ export default function FiatPage() {
     setSummary(await res.json());
   };
 
+  const loadUploadStatus = () => fetch("/api/hr/fiat/upload-status").then(r => r.json()).then(setUploadStatus).catch(() => {});
+
+  useEffect(() => { loadUploadStatus(); }, []);
   useEffect(() => { setPage(0); load(0); loadSummary(); }, [year, month, currency, direction, source]);
   useEffect(() => { load(page); }, [page]);
 
@@ -62,7 +66,7 @@ export default function FiatPage() {
       const res = await fetch(endpoint, { method: "POST", body: formData });
       const data = await res.json();
       alert(data.message);
-      await load(0); setPage(0); await loadSummary();
+      await load(0); setPage(0); await loadSummary(); await loadUploadStatus();
     } catch { alert("업로드 실패"); }
     setUploading(false);
     e.target.value = "";
@@ -82,7 +86,19 @@ export default function FiatPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">법인 입출금</h1>
-          <p className="text-sm text-gray-400">WISE / Aspire 법인통장 입출금 내역 (관리자 전용)</p>
+          <p className="text-sm text-gray-400">
+            WISE / Aspire 법인통장 입출금 내역 (관리자 전용)
+            {uploadStatus?.latest_upload && (
+              <span className="ml-2">
+                · 최근 업로드: {new Date(uploadStatus.latest_upload).toLocaleString("ko-KR")}
+                {uploadStatus.sources?.map((s: any) => (
+                  <span key={s.source} className="ml-1 text-gray-300">
+                    ({s.source} {s.cnt}건)
+                  </span>
+                ))}
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex gap-2">
           <label className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">

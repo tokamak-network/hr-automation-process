@@ -146,7 +146,7 @@ export default function Payroll() {
           <div className="flex gap-2">
             <button onClick={() => window.open("/api/hr/payroll/upload-template", "_blank")}
               className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
-              양식
+              이력 양식
             </button>
             <label className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
               {historyUploading ? "처리 중..." : "가져오기"}

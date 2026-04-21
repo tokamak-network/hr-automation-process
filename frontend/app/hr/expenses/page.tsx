@@ -25,6 +25,7 @@ export default function Expenses() {
   const [form, setForm] = useState<any>(emptyForm);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [expUploading, setExpUploading] = useState(false);
 
   const loadExpenses = () => {
     const q = month ? `year=${year}&month=${month}` : `year=${year}`;
@@ -91,6 +92,20 @@ export default function Expenses() {
           </div>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => window.open("/api/hr/expenses/template", "_blank")}
+            className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+            양식
+          </button>
+          <label className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
+            {expUploading ? "처리 중..." : "가져오기"}
+            <input type="file" accept=".xlsx,.xls" onChange={async (e) => {
+              const file = e.target.files?.[0]; if (!file) return;
+              setExpUploading(true);
+              const fd = new FormData(); fd.append("file", file);
+              try { const r = await fetch("/api/hr/expenses/upload", { method: "POST", body: fd }); const d = await r.json(); alert(d.message); await loadExpenses(); } catch { alert("업로드 실패"); }
+              setExpUploading(false); e.target.value = "";
+            }} className="hidden" disabled={expUploading} />
+          </label>
           <button onClick={() => window.open(`/api/hr/expenses/download?year=${year}${month ? `&month=${month}` : ""}`, "_blank")}
             className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
             내보내기

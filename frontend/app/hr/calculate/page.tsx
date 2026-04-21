@@ -89,12 +89,12 @@ export default function PayrollCalculate() {
           <div>
             <button onClick={handleDownloadTemplate}
               className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
-              양식
+              계산 양식
             </button>
           </div>
           <div>
             <label className="px-3 py-2 rounded-lg text-sm font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC] cursor-pointer inline-block">
-              {uploading ? "처리 중..." : "가져오기"}
+              {uploading ? "처리 중..." : "계산 실행"}
               <input type="file" accept=".xlsx,.xls" onChange={handleUpload} className="hidden" disabled={uploading} />
             </label>
           </div>

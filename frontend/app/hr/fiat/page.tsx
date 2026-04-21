@@ -93,6 +93,16 @@ export default function FiatPage() {
             {uploading ? "처리 중..." : "Aspire 가져오기"}
             <input type="file" accept=".xlsx,.xls" onChange={e => handleUpload("aspire", e)} className="hidden" disabled={uploading} />
           </label>
+          <button onClick={() => {
+            const params = new URLSearchParams();
+            params.set("year", String(year));
+            if (month) params.set("month", String(month));
+            if (currency) params.set("currency", currency);
+            if (source) params.set("source", source);
+            window.open(`/api/hr/fiat/download?${params}`, "_blank");
+          }} className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+            내보내기
+          </button>
         </div>
       </div>
 

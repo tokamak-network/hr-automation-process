@@ -1447,6 +1447,135 @@ async def download_expenses(year: int = 2026, month: Optional[int] = None):
         headers={"Content-Disposition": f"attachment; filename={fname}"})
 
 
+# ── Fiat Transactions (법인 입출금) ──
+
+@app.get("/api/hr/fiat")
+async def list_fiat(currency: str = "", direction: str = "", limit: int = 100, offset: int = 0):
+    db = await get_db()
+    conditions, params = [], []
+    if currency:
+        conditions.append("currency=?")
+        params.append(currency)
+    if direction:
+        conditions.append("direction=?")
+        params.append(direction)
+    where = " WHERE " + " AND ".join(conditions) if conditions else ""
+    rows = await db.execute(f"SELECT * FROM fiat_transactions{where} ORDER BY tx_date DESC LIMIT ? OFFSET ?", params + [limit, offset])
+    data = [dict(r) for r in await rows.fetchall()]
+    count_row = await db.execute(f"SELECT COUNT(*) as cnt FROM fiat_transactions{where}", params)
+    total = (await count_row.fetchone())["cnt"]
+    await db.close()
+    return {"transactions": data, "total": total}
+
+@app.get("/api/hr/fiat/summary")
+async def fiat_summary():
+    db = await get_db()
+    rows = await db.execute("""
+        SELECT currency, direction,
+            COUNT(*) as count, SUM(amount) as total_amount
+        FROM fiat_transactions WHERE status='COMPLETED' OR status='completed'
+        GROUP BY currency, direction ORDER BY currency, direction
+    """)
+    data = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return data
+
+@app.post("/api/hr/fiat/upload-wise")
+async def upload_wise_csv(file: UploadFile = File(...)):
+    """WISE CSV 업로드"""
+    import csv, io
+
+    content = (await file.read()).decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(content))
+
+    db = await get_db()
+    existing = set()
+    rows = await db.execute("SELECT tx_id FROM fiat_transactions WHERE source='WISE'")
+    for r in await rows.fetchall():
+        existing.add(r["tx_id"])
+
+    added = 0
+    for row in reader:
+        tx_id = row.get("ID", "").strip()
+        if not tx_id or tx_id in existing:
+            continue
+        status = row.get("Status", "")
+        direction = row.get("Direction", "")
+        amount = float(row.get("Source amount (after fees)") or 0)
+        currency = row.get("Source currency", "") or row.get("Source fee currency", "")
+        counterparty = row.get("Target name", "") or row.get("Source name", "")
+        tx_date = row.get("Finished on", "") or row.get("Created on", "")
+
+        await db.execute(
+            "INSERT INTO fiat_transactions (tx_id, source, direction, status, amount, currency, counterparty, category, reference, note, exchange_rate, tx_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
+            (tx_id, "WISE", direction, status, amount, currency, counterparty,
+             row.get("Category", ""), row.get("Reference", ""), row.get("Note", ""),
+             float(row.get("Exchange rate") or 0), tx_date))
+        added += 1
+
+    await db.commit()
+    await db.close()
+    return {"added": added, "message": f"WISE: {added}건 업로드 완료"}
+
+@app.post("/api/hr/fiat/upload-aspire")
+async def upload_aspire_excel(file: UploadFile = File(...)):
+    """Aspire 엑셀 업로드 (USD/SGD/GBP)"""
+    import openpyxl, io
+
+    content = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb.active
+
+    # Detect currency from header (e.g., "Amount (USD)")
+    headers = [str(c.value or "") for c in ws[1]]
+    currency = "USD"
+    for h in headers:
+        if "Amount" in h and "(" in h:
+            currency = h.split("(")[1].replace(")", "").strip()
+            break
+
+    db = await get_db()
+    existing = set()
+    rows = await db.execute("SELECT tx_id FROM fiat_transactions WHERE source='Aspire'")
+    for r in await rows.fetchall():
+        existing.add(r["tx_id"])
+
+    added = 0
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row[1]:
+            continue
+        tx_id = str(row[1]).strip()
+        if tx_id in existing:
+            continue
+        tx_type = str(row[2] or "")
+        amount = float(row[3] or 0)
+        counterparty = str(row[4] or "")
+        reference = str(row[8] or "")
+        category = str(row[10] or "")
+        note = str(row[11] or "")
+        balance = float(row[12] or 0) if row[12] else 0
+        tx_date = str(row[16] or "")
+        direction = "IN" if tx_type == "credit" else "OUT"
+
+        await db.execute(
+            "INSERT INTO fiat_transactions (tx_id, source, direction, status, amount, currency, counterparty, category, reference, note, exchange_rate, balance, tx_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,datetime('now'))",
+            (tx_id, "Aspire", direction, "COMPLETED", abs(amount), currency, counterparty,
+             category, reference, note, balance, tx_date))
+        added += 1
+
+    await db.commit()
+    await db.close()
+    return {"added": added, "message": f"Aspire ({currency}): {added}건 업로드 완료"}
+
+@app.delete("/api/hr/fiat/{tx_id}")
+async def delete_fiat(tx_id: int):
+    db = await get_db()
+    await db.execute("DELETE FROM fiat_transactions WHERE id=?", (tx_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deleted"}
+
+
 # ── Member Wallets ──
 
 @app.get("/api/hr/members/{member_id}/wallets")

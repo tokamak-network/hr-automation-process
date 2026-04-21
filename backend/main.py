@@ -1523,15 +1523,17 @@ async def upload_wise_csv(file: UploadFile = File(...)):
         status = row.get("Status", "")
         direction = row.get("Direction", "")
         amount = float(row.get("Source amount (after fees)") or 0)
+        fee = float(row.get("Source fee amount") or 0)
+        gross = amount + fee if fee > 0 else amount
         currency = row.get("Source currency", "") or row.get("Source fee currency", "")
         counterparty = row.get("Target name", "") or row.get("Source name", "")
         tx_date = row.get("Finished on", "") or row.get("Created on", "")
 
         await db.execute(
-            "INSERT INTO fiat_transactions (tx_id, source, direction, status, amount, currency, counterparty, category, reference, note, exchange_rate, tx_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
+            "INSERT INTO fiat_transactions (tx_id, source, direction, status, amount, currency, counterparty, category, reference, note, exchange_rate, tx_date, fee_amount, gross_amount, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
             (tx_id, "WISE", direction, status, amount, currency, counterparty,
              row.get("Category", ""), row.get("Reference", ""), row.get("Note", ""),
-             float(row.get("Exchange rate") or 0), tx_date))
+             float(row.get("Exchange rate") or 0), tx_date, fee, gross))
         added += 1
 
     await db.commit()
@@ -1578,10 +1580,18 @@ async def upload_aspire_excel(file: UploadFile = File(...)):
         tx_date = str(row[16] or "")
         direction = "IN" if tx_type == "credit" else "OUT"
 
+        # Parse fee from reference (e.g., "Fee: SGD 12.50")
+        import re
+        fee = 0.0
+        fee_match = re.search(r'Fee:\s*\w+\s+([\d.]+)', reference)
+        if fee_match:
+            fee = float(fee_match.group(1))
+        gross = abs(amount) + fee if fee > 0 else abs(amount)
+
         await db.execute(
-            "INSERT INTO fiat_transactions (tx_id, source, direction, status, amount, currency, counterparty, category, reference, note, exchange_rate, balance, tx_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,datetime('now'))",
+            "INSERT INTO fiat_transactions (tx_id, source, direction, status, amount, currency, counterparty, category, reference, note, exchange_rate, balance, tx_date, fee_amount, gross_amount, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,datetime('now'))",
             (tx_id, "Aspire", direction, "COMPLETED", abs(amount), currency, counterparty,
-             category, reference, note, balance, tx_date))
+             category, reference, note, balance, tx_date, fee, gross))
         added += 1
 
     await db.commit()

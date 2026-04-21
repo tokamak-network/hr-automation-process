@@ -1450,7 +1450,7 @@ async def download_expenses(year: int = 2026, month: Optional[int] = None):
 # ── Fiat Transactions (법인 입출금) ──
 
 @app.get("/api/hr/fiat")
-async def list_fiat(currency: str = "", direction: str = "", limit: int = 100, offset: int = 0):
+async def list_fiat(currency: str = "", direction: str = "", source: str = "", year: Optional[int] = None, month: Optional[int] = None, limit: int = 100, offset: int = 0):
     db = await get_db()
     conditions, params = [], []
     if currency:
@@ -1459,6 +1459,15 @@ async def list_fiat(currency: str = "", direction: str = "", limit: int = 100, o
     if direction:
         conditions.append("direction=?")
         params.append(direction)
+    if source:
+        conditions.append("source=?")
+        params.append(source)
+    if year:
+        conditions.append("CAST(substr(tx_date, 1, 4) AS INTEGER)=?")
+        params.append(year)
+    if month:
+        conditions.append("CAST(substr(tx_date, 6, 2) AS INTEGER)=?")
+        params.append(month)
     where = " WHERE " + " AND ".join(conditions) if conditions else ""
     rows = await db.execute(f"SELECT * FROM fiat_transactions{where} ORDER BY tx_date DESC LIMIT ? OFFSET ?", params + [limit, offset])
     data = [dict(r) for r in await rows.fetchall()]
@@ -1468,14 +1477,26 @@ async def list_fiat(currency: str = "", direction: str = "", limit: int = 100, o
     return {"transactions": data, "total": total}
 
 @app.get("/api/hr/fiat/summary")
-async def fiat_summary():
+async def fiat_summary(year: Optional[int] = None, month: Optional[int] = None, source: str = ""):
     db = await get_db()
-    rows = await db.execute("""
+    conditions = ["(status='COMPLETED' OR status='completed')"]
+    params: list = []
+    if year:
+        conditions.append("CAST(substr(tx_date, 1, 4) AS INTEGER)=?")
+        params.append(year)
+    if month:
+        conditions.append("CAST(substr(tx_date, 6, 2) AS INTEGER)=?")
+        params.append(month)
+    if source:
+        conditions.append("source=?")
+        params.append(source)
+    where = " WHERE " + " AND ".join(conditions)
+    rows = await db.execute(f"""
         SELECT currency, direction,
             COUNT(*) as count, SUM(amount) as total_amount
-        FROM fiat_transactions WHERE status='COMPLETED' OR status='completed'
+        FROM fiat_transactions{where}
         GROUP BY currency, direction ORDER BY currency, direction
-    """)
+    """, params)
     data = [dict(r) for r in await rows.fetchall()]
     await db.close()
     return data

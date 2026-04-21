@@ -8,7 +8,7 @@ import re
 import json
 import sqlite3
 import httpx
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from urllib.parse import quote_plus
 from dotenv import load_dotenv
@@ -65,11 +65,12 @@ def init_linkedin_db():
             source TEXT DEFAULT 'search'
         )
     """)
-    # Add source column if missing (for existing DBs)
-    try:
-        conn.execute("ALTER TABLE linkedin_candidates ADD COLUMN source TEXT DEFAULT 'search'")
-    except:
-        pass
+    # Add columns if missing (for existing DBs)
+    for col, default in [("source", "'search'"), ("first_seen_at", "NULL"), ("last_searched_at", "NULL"), ("search_count", "'1'"), ("score_breakdown", "NULL")]:
+        try:
+            conn.execute(f"ALTER TABLE linkedin_candidates ADD COLUMN {col} TEXT DEFAULT {default}")
+        except:
+            pass
     conn.commit()
     conn.close()
 
@@ -338,41 +339,65 @@ def score_candidate(candidate: dict) -> tuple:
 
 
 def save_candidate(candidate: dict, score: float, source: str = "search", score_breakdown: str = "") -> bool:
-    """Save candidate to database."""
+    """Save candidate to database. Preserves status/notes/outreach history on re-search."""
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     try:
-        # Skip if same candidate was found within last 30 days
         existing = conn.execute(
-            "SELECT created_at FROM linkedin_candidates WHERE linkedin_username = ? AND created_at >= datetime('now', '-30 days')",
+            "SELECT id, status, notes, created_at, first_seen_at, search_count FROM linkedin_candidates WHERE linkedin_username = ?",
             (candidate["linkedin_username"],)
         ).fetchone()
+
+        now = datetime.utcnow().isoformat()
+
         if existing:
-            conn.close()
-            return False
-        
-        conn.execute("""
-            INSERT OR REPLACE INTO linkedin_candidates
-            (linkedin_username, full_name, headline, location, profile_url,
-             open_to_work, search_keyword, raw_data, score, created_at, source, score_breakdown)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            candidate["linkedin_username"],
-            candidate["full_name"],
-            candidate["headline"],
-            candidate["location"],
-            candidate["profile_url"],
-            1 if candidate.get("open_to_work") else 0,
-            candidate.get("search_keyword", ""),
-            candidate.get("raw_data", ""),
-            score,
-            datetime.utcnow().isoformat(),
-            source,
-            score_breakdown,
-        ))
-        conn.commit()
-        return conn.total_changes > 0
+            # Skip if searched within last 30 days
+            last_search = conn.execute(
+                "SELECT last_searched_at FROM linkedin_candidates WHERE id = ?", (existing[0],)
+            ).fetchone()
+            last_ts = last_search[0] if last_search and last_search[0] else existing[3]
+            if last_ts and last_ts >= (datetime.utcnow() - timedelta(days=30)).isoformat():
+                conn.close()
+                return False
+
+            # Re-search after 30 days: update profile info but PRESERVE status/notes/history
+            old_status = existing[1] or "discovered"
+            old_notes = existing[2] or ""
+            first_seen = existing[4] or existing[3] or now
+            count = int(existing[5] or 1) + 1
+
+            conn.execute("""
+                UPDATE linkedin_candidates SET
+                    full_name=?, headline=?, location=?, profile_url=?,
+                    open_to_work=?, search_keyword=?, raw_data=?, score=?,
+                    source=?, score_breakdown=?, last_searched_at=?, search_count=?
+                WHERE id=?
+            """, (
+                candidate["full_name"], candidate["headline"], candidate["location"],
+                candidate["profile_url"], 1 if candidate.get("open_to_work") else 0,
+                candidate.get("search_keyword", ""), candidate.get("raw_data", ""),
+                score, source, score_breakdown, now, str(count), existing[0],
+            ))
+            conn.commit()
+            return True
+        else:
+            # New candidate
+            conn.execute("""
+                INSERT INTO linkedin_candidates
+                (linkedin_username, full_name, headline, location, profile_url,
+                 open_to_work, search_keyword, raw_data, score, status, created_at,
+                 source, score_breakdown, first_seen_at, last_searched_at, search_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'discovered', ?, ?, ?, ?, ?, '1')
+            """, (
+                candidate["linkedin_username"], candidate["full_name"],
+                candidate["headline"], candidate["location"], candidate["profile_url"],
+                1 if candidate.get("open_to_work") else 0,
+                candidate.get("search_keyword", ""), candidate.get("raw_data", ""),
+                score, now, source, score_breakdown, now, now,
+            ))
+            conn.commit()
+            return conn.total_changes > 0
     except Exception as e:
         print(f"DB error: {e}")
         return False

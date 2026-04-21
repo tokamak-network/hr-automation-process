@@ -33,10 +33,10 @@ export default function Sidebar() {
   return (
     <aside className="w-60 shrink-0 border-r border-gray-200 flex flex-col h-screen sticky top-0 bg-white">
       {/* Logo */}
-      <div className="p-5 flex items-center gap-2.5 border-b border-gray-200">
-        <img src="/tokamak-symbol.png" alt="Tokamak" className="h-9 w-auto" />
+      <div className="p-5 flex items-center gap-1.5 border-b border-gray-200">
+        <img src="/tokamak-symbol.png" alt="Tokamak" className="h-[42px] w-[42px] object-contain -m-1" />
         <div>
-          <div className="font-bold text-sm text-[#1C1C1C]">Tokamak</div>
+          <div className="font-bold text-sm text-[#1C1C1C]">Tokamak Network</div>
           <div className="text-xs text-gray-400">HR Solution</div>
         </div>
       </div>

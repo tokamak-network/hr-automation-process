@@ -1510,6 +1510,19 @@ async def download_expenses_template():
 
 # ── Fiat Transactions (법인 입출금) ──
 
+@app.get("/api/hr/fiat/upload-status")
+async def fiat_upload_status():
+    """최근 업로드 시점 및 데이터 현황"""
+    db = await get_db()
+    total_row = await db.execute("SELECT COUNT(*) as cnt FROM fiat_transactions")
+    total = (await total_row.fetchone())["cnt"]
+    latest_row = await db.execute("SELECT MAX(created_at) as latest FROM fiat_transactions")
+    latest = (await latest_row.fetchone())["latest"]
+    by_source = await db.execute("SELECT source, COUNT(*) as cnt, MAX(created_at) as last_upload FROM fiat_transactions GROUP BY source")
+    sources = [dict(r) for r in await by_source.fetchall()]
+    await db.close()
+    return {"total": total, "latest_upload": latest, "sources": sources}
+
 @app.get("/api/hr/fiat")
 async def list_fiat(currency: str = "", direction: str = "", source: str = "", year: Optional[int] = None, month: Optional[int] = None, limit: int = 100, offset: int = 0):
     db = await get_db()
@@ -1576,10 +1589,13 @@ async def upload_wise_csv(file: UploadFile = File(...)):
     for r in await rows.fetchall():
         existing.add(r["tx_id"])
 
-    added = 0
+    added, skipped = 0, 0
     for row in reader:
         tx_id = row.get("ID", "").strip()
-        if not tx_id or tx_id in existing:
+        if not tx_id:
+            continue
+        if tx_id in existing:
+            skipped += 1
             continue
         status = row.get("Status", "")
         direction = row.get("Direction", "")
@@ -1599,7 +1615,7 @@ async def upload_wise_csv(file: UploadFile = File(...)):
 
     await db.commit()
     await db.close()
-    return {"added": added, "message": f"WISE: {added}건 업로드 완료"}
+    return {"added": added, "skipped": skipped, "message": f"WISE: {added}건 추가, {skipped}건 중복 제외"}
 
 @app.post("/api/hr/fiat/upload-aspire")
 async def upload_aspire_excel(file: UploadFile = File(...)):
@@ -1624,12 +1640,13 @@ async def upload_aspire_excel(file: UploadFile = File(...)):
     for r in await rows.fetchall():
         existing.add(r["tx_id"])
 
-    added = 0
+    added, skipped = 0, 0
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row[1]:
             continue
         tx_id = str(row[1]).strip()
         if tx_id in existing:
+            skipped += 1
             continue
         tx_type = str(row[2] or "")
         amount = float(row[3] or 0)
@@ -1657,7 +1674,7 @@ async def upload_aspire_excel(file: UploadFile = File(...)):
 
     await db.commit()
     await db.close()
-    return {"added": added, "message": f"Aspire ({currency}): {added}건 업로드 완료"}
+    return {"added": added, "skipped": skipped, "message": f"Aspire ({currency}): {added}건 추가, {skipped}건 중복 제외"}
 
 @app.delete("/api/hr/fiat/{tx_id}")
 async def delete_fiat(tx_id: int):

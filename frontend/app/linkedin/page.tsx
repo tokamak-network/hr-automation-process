@@ -60,6 +60,9 @@ interface Candidate {
   search_keyword?: string;
   github_url?: string;
   score_breakdown?: string;
+  first_seen_at?: string;
+  last_searched_at?: string;
+  search_count?: string;
 }
 
 interface OutreachTemplate {
@@ -657,8 +660,8 @@ export default function LinkedInPage() {
         </div>
 
         <p className="text-xs text-gray-400 mb-2">
-          ℹ️ 동일 후보자는 최초 검색 후 <strong>30일 이내</strong> 재검색 시
-          중복으로 처리되어 건너뜁니다. 30일 이후에는 갱신됩니다.
+          ℹ️ 동일 후보자는 <strong>30일 이내</strong> 재검색 시 건너뜁니다.
+          30일 이후 재검색 시 프로필은 갱신되지만, <strong>상태(Contacted/Responded 등)와 아웃리치 이력은 보존</strong>됩니다.
         </p>
 
         {searchResult && (
@@ -770,6 +773,11 @@ export default function LinkedInPage() {
                           New
                         </span>
                       )}
+                      {Number(c.search_count) > 1 && (
+                        <span className="ml-1 text-[10px] bg-purple-100 text-purple-600 px-1.5 rounded">
+                          {c.search_count}x seen
+                        </span>
+                      )}
                     </td>
                     <td className="py-2.5 px-4 max-w-xs truncate text-gray-500">
                       {c.headline}
@@ -856,6 +864,21 @@ export default function LinkedInPage() {
                     <tr key={`${c.id}-expanded`}>
                       <td colSpan={7} className="bg-gray-50 px-6 py-4">
                         <div className="text-xs text-gray-600">
+                          {/* Candidate meta info */}
+                          <div className="flex flex-wrap gap-4 mb-3 text-gray-400">
+                            {c.first_seen_at && (
+                              <span>First seen: {new Date(c.first_seen_at).toLocaleDateString()}</span>
+                            )}
+                            {c.last_searched_at && (
+                              <span>Last searched: {new Date(c.last_searched_at).toLocaleDateString()}</span>
+                            )}
+                            {Number(c.search_count) > 0 && (
+                              <span>Search count: {c.search_count}</span>
+                            )}
+                            {c.source && (
+                              <span>Source: {c.source}</span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-semibold text-gray-700">
                               📋 Outreach History

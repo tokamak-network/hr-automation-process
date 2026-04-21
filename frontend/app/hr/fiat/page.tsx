@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 const fmt = (n: number) => new Intl.NumberFormat("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(n));
 const fmtInt = (n: number) => new Intl.NumberFormat("ko-KR").format(Math.round(Math.abs(n)));
@@ -17,6 +17,7 @@ export default function FiatPage() {
   const [direction, setDirection] = useState("");
   const [page, setPage] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const PAGE_SIZE = 100;
 
   const buildParams = (p?: number) => {
@@ -195,8 +196,8 @@ export default function FiatPage() {
             </tr>
           </thead>
           <tbody>
-            {transactions.map(tx => (
-              <tr key={tx.id} className="border-t border-gray-100 hover:bg-gray-50">
+            {transactions.map(tx => (<React.Fragment key={tx.id}>
+              <tr className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(expandedId === tx.id ? null : tx.id)}>
                 <td className="p-2.5 text-xs text-gray-500 whitespace-nowrap">{tx.tx_date?.slice(0, 10)}</td>
                 <td className="p-2.5">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${tx.source === "WISE" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
@@ -223,10 +224,45 @@ export default function FiatPage() {
                     {tx.status === "COMPLETED" || tx.status === "completed" ? "완료" : tx.status === "CANCELLED" ? "취소" : tx.status}
                   </span>
                 </td>
-                <td className="text-center p-2.5">
+                <td className="text-center p-2.5" onClick={e => e.stopPropagation()}>
                   <button onClick={() => handleDelete(tx.id)} className="text-[10px] text-red-400 hover:text-red-600">삭제</button>
                 </td>
               </tr>
+              {expandedId === tx.id && (
+                <tr>
+                  <td colSpan={11} className="bg-gray-50 px-4 py-3">
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-gray-400">상대방: </span>
+                        <span className="text-gray-700">{tx.counterparty || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">TX ID: </span>
+                        <span className="text-gray-700 font-mono">{tx.tx_id || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">카테고리: </span>
+                        <span className="text-gray-700">{tx.category || "-"}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-400">소스: </span>
+                        <span className="text-gray-700">{tx.source}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-gray-400">참고: </span>
+                        <span className="text-gray-700 break-all">{tx.reference || "-"}</span>
+                      </div>
+                      {tx.note && (
+                        <div className="col-span-2">
+                          <span className="text-gray-400">메모: </span>
+                          <span className="text-gray-700 break-all">{tx.note}</span>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>)
             ))}
             {transactions.length === 0 && (
               <tr><td colSpan={11} className="py-8 text-center text-gray-400">해당 기간의 입출금 내역이 없습니다</td></tr>

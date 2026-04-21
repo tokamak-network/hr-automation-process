@@ -1447,6 +1447,67 @@ async def download_expenses(year: int = 2026, month: Optional[int] = None):
         headers={"Content-Disposition": f"attachment; filename={fname}"})
 
 
+@app.post("/api/hr/expenses/upload")
+async def upload_expenses(file: UploadFile = File(...)):
+    """경비 엑셀 일괄 업로드. 컬럼: 연도, 월, 이름, 금액(USDT), 카테고리, 내용, TX Hash, 상태, 발생일"""
+    import openpyxl, io
+
+    content = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb.active
+
+    db = await get_db()
+    added, skipped = 0, 0
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row[0] or not row[2]:
+            continue
+        year = int(row[0])
+        month = int(row[1])
+        name = str(row[2]).strip()
+        amount = float(row[3] or 0)
+        category = str(row[4] or "기타").strip()
+        description = str(row[5] or "").strip()
+        tx_hash = str(row[6] or "").strip() if len(row) > 6 else ""
+        status = str(row[7] or "pending").strip() if len(row) > 7 else "pending"
+        expense_date = str(row[8] or "").strip() if len(row) > 8 else ""
+
+        r = await db.execute("SELECT id FROM hr_members WHERE name=?", (name,))
+        member = await r.fetchone()
+        if not member:
+            skipped += 1
+            continue
+
+        await db.execute(
+            "INSERT INTO expenses (member_id, year, month, amount_usdt, category, description, tx_hash, status, expense_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,datetime('now'))",
+            (member["id"], year, month, amount, category, description, tx_hash, status, expense_date))
+        added += 1
+
+    await db.commit()
+    await db.close()
+    return {"added": added, "skipped": skipped, "message": f"{added}건 추가, {skipped}건 스킵"}
+
+@app.get("/api/hr/expenses/template")
+async def download_expenses_template():
+    """경비 업로드용 양식"""
+    import openpyxl, io
+    from fastapi.responses import StreamingResponse
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "경비"
+    ws.append(["연도", "월", "이름", "금액(USDT)", "카테고리", "내용", "TX Hash", "상태", "발생일"])
+    ws.append([2026, 4, "예시", 100, "출장비", "서울 출장", "", "pending", "2026-04-15"])
+    for col, w in [("A",8),("B",6),("C",12),("D",12),("E",10),("F",20),("G",20),("H",10),("I",12)]:
+        ws.column_dimensions[col].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=expenses_template.xlsx"})
+
+
 # ── Fiat Transactions (법인 입출금) ──
 
 @app.get("/api/hr/fiat")
@@ -1605,6 +1666,49 @@ async def delete_fiat(tx_id: int):
     await db.commit()
     await db.close()
     return {"message": "Deleted"}
+
+@app.get("/api/hr/fiat/download")
+async def download_fiat(year: Optional[int] = None, month: Optional[int] = None, currency: str = "", source: str = ""):
+    """법인 입출금 내역 엑셀 다운로드"""
+    import openpyxl, io
+    from fastapi.responses import StreamingResponse
+
+    db = await get_db()
+    conditions, params = [], []
+    if year:
+        conditions.append("CAST(substr(tx_date, 1, 4) AS INTEGER)=?")
+        params.append(year)
+    if month:
+        conditions.append("CAST(substr(tx_date, 6, 2) AS INTEGER)=?")
+        params.append(month)
+    if currency:
+        conditions.append("currency=?")
+        params.append(currency)
+    if source:
+        conditions.append("source=?")
+        params.append(source)
+    where = " WHERE " + " AND ".join(conditions) if conditions else ""
+    rows = await db.execute(f"SELECT * FROM fiat_transactions{where} ORDER BY tx_date DESC", params)
+    data = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "입출금"
+    ws.append(["일시", "소스", "방향", "상대방", "금액", "통화", "수수료", "총액", "카테고리", "참고", "상태", "TX ID"])
+    for tx in data:
+        ws.append([tx["tx_date"], tx["source"], tx["direction"], tx["counterparty"],
+                   tx["amount"], tx["currency"], tx.get("fee_amount", 0), tx.get("gross_amount", 0),
+                   tx["category"], tx["reference"], tx["status"], tx["tx_id"]])
+    for col in ["A","B","C","D","E","F","G","H","I","J","K","L"]:
+        ws.column_dimensions[col].width = 14
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"fiat_{year or 'all'}{'_'+str(month)+'m' if month else ''}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}"})
 
 
 # ── Member Wallets ──

@@ -146,14 +146,14 @@ export default function Members() {
           <p className="text-sm text-gray-400">재직 {activeMembers.length}명 · 퇴직 {retiredMembers.length}명</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleDownload}
-            className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
-            다운로드
-          </button>
-          <label className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
-            {uploading ? "업로드 중..." : "업로드"}
+          <label className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
+            {uploading ? "처리 중..." : "가져오기"}
             <input type="file" accept=".xlsx,.xls" onChange={handleUpload} className="hidden" disabled={uploading} />
           </label>
+          <button onClick={handleDownload}
+            className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+            내보내기
+          </button>
           {tab === "active" && (
             <>
               <button onClick={() => setShowAdd(true)}

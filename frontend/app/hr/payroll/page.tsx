@@ -145,16 +145,16 @@ export default function Payroll() {
         {tab === "monthly" && (
           <div className="flex gap-2">
             <button onClick={() => window.open("/api/hr/payroll/upload-template", "_blank")}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
-              이력 템플릿
+              className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+              양식
             </button>
-            <label className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
-              {historyUploading ? "업로드 중..." : "이력 업로드"}
+            <label className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
+              {historyUploading ? "처리 중..." : "가져오기"}
               <input type="file" accept=".xlsx,.xls" onChange={handleHistoryUpload} className="hidden" disabled={historyUploading} />
             </label>
             <button onClick={() => window.open(`/api/hr/payroll/download?year=${year}&month=${month}`, "_blank")}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
-              다운로드
+              className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+              내보내기
             </button>
           </div>
         )}

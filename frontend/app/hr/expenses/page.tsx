@@ -92,11 +92,11 @@ export default function Expenses() {
         </div>
         <div className="flex gap-2">
           <button onClick={() => window.open(`/api/hr/expenses/download?year=${year}${month ? `&month=${month}` : ""}`, "_blank")}
-            className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
-            다운로드
+            className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+            내보내기
           </button>
           <button onClick={() => { setForm({ ...emptyForm, year, month: month || currentMonth }); setEditingId(null); setShowForm(true); }}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC]">
+            className="px-3 py-2 rounded-lg text-sm font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC]">
             + 경비 추가
           </button>
         </div>

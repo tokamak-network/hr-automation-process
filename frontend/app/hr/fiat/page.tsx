@@ -85,12 +85,12 @@ export default function FiatPage() {
           <p className="text-sm text-gray-400">WISE / Aspire 법인통장 입출금 내역 (관리자 전용)</p>
         </div>
         <div className="flex gap-2">
-          <label className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
-            {uploading ? "업로드 중..." : "WISE CSV"}
+          <label className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
+            {uploading ? "처리 중..." : "WISE 가져오기"}
             <input type="file" accept=".csv" onChange={e => handleUpload("wise", e)} className="hidden" disabled={uploading} />
           </label>
-          <label className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
-            {uploading ? "업로드 중..." : "Aspire Excel"}
+          <label className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
+            {uploading ? "처리 중..." : "Aspire 가져오기"}
             <input type="file" accept=".xlsx,.xls" onChange={e => handleUpload("aspire", e)} className="hidden" disabled={uploading} />
           </label>
         </div>

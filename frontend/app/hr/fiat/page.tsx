@@ -158,6 +158,7 @@ export default function FiatPage() {
           <option value="">전체 방향</option>
           <option value="IN">입금</option>
           <option value="OUT">출금</option>
+          <option value="NEUTRAL">내부</option>
         </select>
         <span className="text-sm text-gray-500 ml-auto">{total}건 (page {page + 1}/{totalPages})</span>
       </div>
@@ -180,15 +181,15 @@ export default function FiatPage() {
           </colgroup>
           <thead>
             <tr className="bg-gray-50 text-xs text-gray-400">
-              <th className="text-left p-2.5">일시</th>
-              <th className="text-left p-2.5">소스</th>
-              <th className="text-left p-2.5">방향</th>
-              <th className="text-left p-2.5">상대방</th>
-              <th className="text-right p-2.5">금액</th>
-              <th className="text-right p-2.5">수수료</th>
-              <th className="text-right p-2.5">총액</th>
-              <th className="text-left p-2.5">카테고리</th>
-              <th className="text-left p-2.5">참고</th>
+              <th className="text-center p-2.5">일시</th>
+              <th className="text-center p-2.5">소스</th>
+              <th className="text-center p-2.5">방향</th>
+              <th className="text-center p-2.5">상대방</th>
+              <th className="text-center p-2.5">금액</th>
+              <th className="text-center p-2.5">수수료</th>
+              <th className="text-center p-2.5">총액</th>
+              <th className="text-center p-2.5">카테고리</th>
+              <th className="text-center p-2.5">참고</th>
               <th className="text-center p-2.5">상태</th>
               <th className="p-2.5"></th>
             </tr>
@@ -202,12 +203,12 @@ export default function FiatPage() {
                     {tx.source}
                   </span>
                 </td>
-                <td className="p-2.5">
+                <td className="p-2.5 text-center">
                   <span className={`text-xs font-medium ${tx.direction === "IN" ? "text-emerald-600" : tx.direction === "OUT" ? "text-red-500" : "text-gray-400"}`}>
-                    {tx.direction === "IN" ? "입금" : tx.direction === "OUT" ? "출금" : tx.direction}
+                    {tx.direction === "IN" ? "입금" : tx.direction === "OUT" ? "출금" : "내부"}
                   </span>
                 </td>
-                <td className="p-2.5 text-xs text-gray-600 truncate">{tx.counterparty || "-"}</td>
+                <td className="p-2.5 text-xs text-gray-600 truncate" title={tx.counterparty || ""}>{tx.counterparty || "-"}</td>
                 <td className={`text-right p-2.5 font-semibold tabular-nums text-xs ${tx.direction === "IN" ? "text-emerald-600" : "text-gray-900"}`}>
                   {tx.direction === "IN" ? "+" : "-"}{fmt(tx.amount)} <span className="text-gray-400 font-normal">{tx.currency}</span>
                 </td>
@@ -215,8 +216,8 @@ export default function FiatPage() {
                 <td className="text-right p-2.5 text-xs tabular-nums font-medium">
                   {tx.fee_amount > 0 ? <>{fmt(tx.gross_amount)} <span className="text-gray-400 font-normal">{tx.currency}</span></> : "-"}
                 </td>
-                <td className="p-2.5 text-[10px] text-gray-400 truncate">{tx.category || "-"}</td>
-                <td className="p-2.5 text-[10px] text-gray-400 truncate">{tx.reference || tx.note || "-"}</td>
+                <td className="p-2.5 text-[10px] text-gray-400 truncate" title={tx.category || ""}>{tx.category || "-"}</td>
+                <td className="p-2.5 text-[10px] text-gray-400 truncate" title={tx.reference || tx.note || ""}>{tx.reference || tx.note || "-"}</td>
                 <td className="text-center p-2.5">
                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${tx.status === "COMPLETED" || tx.status === "completed" ? "bg-emerald-100 text-emerald-700" : tx.status === "CANCELLED" ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>
                     {tx.status === "COMPLETED" || tx.status === "completed" ? "완료" : tx.status === "CANCELLED" ? "취소" : tx.status}

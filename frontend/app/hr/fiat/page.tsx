@@ -158,6 +158,13 @@ export default function FiatPage() {
 
       {/* 필터 */}
       <div className="flex items-center gap-3 mb-4">
+        <select value={currency} onChange={e => setCurrency(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-sm border border-gray-300">
+          <option value="">전체 통화</option>
+          <option value="USD">USD</option>
+          <option value="SGD">SGD</option>
+          <option value="GBP">GBP</option>
+        </select>
         <select value={source} onChange={e => setSource(e.target.value)}
           className="px-3 py-1.5 rounded-lg text-sm border border-gray-300">
           <option value="">전체 소스</option>

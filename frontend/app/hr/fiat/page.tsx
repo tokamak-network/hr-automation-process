@@ -175,6 +175,8 @@ export default function FiatPage() {
               <th className="text-left p-3 text-gray-400">방향</th>
               <th className="text-left p-3 text-gray-400">상대방</th>
               <th className="text-right p-3 text-gray-400">금액</th>
+              <th className="text-right p-3 text-gray-400">수수료</th>
+              <th className="text-right p-3 text-gray-400">총액</th>
               <th className="text-left p-3 text-gray-400">카테고리</th>
               <th className="text-left p-3 text-gray-400">참고</th>
               <th className="text-right p-3 text-gray-400">상태</th>
@@ -199,6 +201,8 @@ export default function FiatPage() {
                 <td className={`text-right p-3 font-semibold ${tx.direction === "IN" ? "text-emerald-600" : "text-gray-900"}`}>
                   {tx.direction === "IN" ? "+" : "-"}{fmt(Math.abs(tx.amount))} {tx.currency}
                 </td>
+                <td className="text-right p-3 text-xs text-amber-600">{tx.fee_amount > 0 ? fmt(tx.fee_amount) : "-"}</td>
+                <td className="text-right p-3 text-xs font-medium">{tx.gross_amount > 0 && tx.fee_amount > 0 ? `${fmt(tx.gross_amount)} ${tx.currency}` : "-"}</td>
                 <td className="p-3 text-xs text-gray-400">{tx.category || "-"}</td>
                 <td className="p-3 text-xs text-gray-400 max-w-[200px] truncate">{tx.reference || tx.note || "-"}</td>
                 <td className="text-right p-3">
@@ -212,7 +216,7 @@ export default function FiatPage() {
               </tr>
             ))}
             {transactions.length === 0 && (
-              <tr><td colSpan={9} className="py-8 text-center text-gray-400">해당 기간의 입출금 내역이 없습니다</td></tr>
+              <tr><td colSpan={11} className="py-8 text-center text-gray-400">해당 기간의 입출금 내역이 없습니다</td></tr>
             )}
           </tbody>
         </table>

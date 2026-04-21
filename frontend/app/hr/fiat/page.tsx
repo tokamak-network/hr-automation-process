@@ -262,8 +262,7 @@ export default function FiatPage() {
                   </td>
                 </tr>
               )}
-            </React.Fragment>)
-            ))}
+            </React.Fragment>))}
             {transactions.length === 0 && (
               <tr><td colSpan={11} className="py-8 text-center text-gray-400">해당 기간의 입출금 내역이 없습니다</td></tr>
             )}

@@ -638,14 +638,22 @@ async def github_search(data: LinkedInSearchRequest):
 
 
 @app.get("/api/linkedin/candidates")
-async def linkedin_candidates(status: str = "", limit: int = 50, offset: int = 0):
-    """List LinkedIn candidates with scores."""
+async def linkedin_candidates(status: str = "", limit: int = 100, offset: int = 0):
+    """List LinkedIn candidates with scores and total count."""
     candidates = get_linkedin_candidates(
         status=status or None,
         limit=limit,
         offset=offset,
     )
-    return candidates
+    # Get total count for pagination
+    db = await get_db()
+    if status:
+        row = await db.execute("SELECT COUNT(*) as cnt FROM linkedin_candidates WHERE status=?", (status,))
+    else:
+        row = await db.execute("SELECT COUNT(*) as cnt FROM linkedin_candidates")
+    total = (await row.fetchone())["cnt"]
+    await db.close()
+    return {"candidates": candidates, "total": total}
 
 
 class OutreachRequest(BaseModel):

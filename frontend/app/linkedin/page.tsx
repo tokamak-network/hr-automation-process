@@ -340,6 +340,9 @@ export default function LinkedInPage() {
   ]);
   const [statusFilter, setStatusFilter] = useState("");
   const [searchResult, setSearchResult] = useState<any>(null);
+  const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 100;
   const [newCandidateIds, setNewCandidateIds] = useState<Set<number>>(new Set());
   const [scoreTooltip, setScoreTooltip] = useState<{ bd: any; x: number; y: number } | null>(null);
   const [bridging, setBridging] = useState(false);
@@ -351,15 +354,18 @@ export default function LinkedInPage() {
   const [expandedCandidate, setExpandedCandidate] = useState<number | null>(null);
   const [outreachHistory, setOutreachHistory] = useState<Record<number, OutreachHistoryItem[]>>({});
 
-  const fetchCandidates = async () => {
+  const fetchCandidates = async (p?: number) => {
     setLoading(true);
+    const currentPage = p ?? page;
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set("status", statusFilter);
-      params.set("limit", "100");
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(currentPage * PAGE_SIZE));
       const res = await fetch(`${API}/api/linkedin/candidates?${params}`);
       const data = await res.json();
-      setCandidates(data);
+      setCandidates(data.candidates || []);
+      setTotalCount(data.total || 0);
     } catch (e) {
       console.error("Failed to fetch candidates", e);
     }
@@ -389,9 +395,14 @@ export default function LinkedInPage() {
   };
 
   useEffect(() => {
-    fetchCandidates();
+    setPage(0);
+    fetchCandidates(0);
     fetchTemplates();
   }, [statusFilter]);
+
+  useEffect(() => {
+    fetchCandidates(page);
+  }, [page]);
 
   const addKeyword = (kw: string) => {
     const trimmed = kw.trim();
@@ -481,12 +492,16 @@ export default function LinkedInPage() {
       keywords_searched: activeKeywords.length,
     });
     // Fetch updated candidates and detect new ones
+    setPage(0);
     const params = new URLSearchParams();
     if (statusFilter) params.set("status", statusFilter);
-    params.set("limit", "100");
+    params.set("limit", String(PAGE_SIZE));
+    params.set("offset", "0");
     const cRes = await fetch(`${API}/api/linkedin/candidates?${params}`);
-    const updatedCandidates: Candidate[] = await cRes.json();
+    const cData = await cRes.json();
+    const updatedCandidates: Candidate[] = cData.candidates || [];
     setCandidates(updatedCandidates);
+    setTotalCount(cData.total || 0);
     const newIds = new Set(updatedCandidates.filter((c) => !existingIds.has(c.id)).map((c) => c.id));
     setNewCandidateIds(newIds);
     setSearching(false);
@@ -701,7 +716,7 @@ export default function LinkedInPage() {
           </button>
         ))}
         <span className="text-sm font-semibold ml-auto text-gray-700">
-          📊 {candidates.length} candidates
+          📊 {totalCount} candidates (page {page + 1}/{Math.max(1, Math.ceil(totalCount / PAGE_SIZE))})
         </span>
       </div>
 
@@ -940,6 +955,26 @@ export default function LinkedInPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalCount > PAGE_SIZE && (
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+            className="px-3 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-30">
+            ← Prev
+          </button>
+          {Array.from({ length: Math.ceil(totalCount / PAGE_SIZE) }, (_, i) => (
+            <button key={i} onClick={() => setPage(i)}
+              className={`px-3 py-1.5 rounded text-sm font-medium ${i === page ? "bg-[#1C1C1C] text-white" : "border border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+              {i + 1}
+            </button>
+          ))}
+          <button onClick={() => setPage(p => Math.min(Math.ceil(totalCount / PAGE_SIZE) - 1, p + 1))} disabled={page >= Math.ceil(totalCount / PAGE_SIZE) - 1}
+            className="px-3 py-1.5 rounded text-sm border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-30">
+            Next →
+          </button>
         </div>
       )}
 

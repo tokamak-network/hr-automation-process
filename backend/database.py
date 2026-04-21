@@ -220,6 +220,23 @@ async def init_db():
         created_at TEXT,
         FOREIGN KEY (member_id) REFERENCES hr_members(id)
     );
+    CREATE TABLE IF NOT EXISTS fiat_transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tx_id TEXT,
+        source TEXT,
+        direction TEXT,
+        status TEXT,
+        amount REAL,
+        currency TEXT,
+        counterparty TEXT,
+        category TEXT,
+        reference TEXT,
+        note TEXT,
+        exchange_rate REAL,
+        balance REAL,
+        tx_date TEXT,
+        created_at TEXT
+    );
     CREATE TABLE IF NOT EXISTS expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         member_id INTEGER NOT NULL,

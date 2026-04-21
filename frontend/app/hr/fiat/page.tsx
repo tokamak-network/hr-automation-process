@@ -2,38 +2,53 @@
 import { useEffect, useState } from "react";
 
 const fmt = (n: number) => new Intl.NumberFormat("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+const now = new Date();
+const currentYear = now.getFullYear();
+const currentMonth = now.getMonth() + 1;
 
 export default function FiatPage() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [summary, setSummary] = useState<any[]>([]);
+  const [year, setYear] = useState(currentYear);
+  const [month, setMonth] = useState<number | null>(null);
   const [currency, setCurrency] = useState("");
+  const [source, setSource] = useState("");
   const [direction, setDirection] = useState("");
   const [page, setPage] = useState(0);
   const [uploading, setUploading] = useState(false);
   const PAGE_SIZE = 100;
 
-  const load = async (p?: number) => {
-    const currentPage = p ?? page;
+  const buildParams = (p?: number) => {
     const params = new URLSearchParams();
     if (currency) params.set("currency", currency);
     if (direction) params.set("direction", direction);
+    if (source) params.set("source", source);
+    params.set("year", String(year));
+    if (month) params.set("month", String(month));
     params.set("limit", String(PAGE_SIZE));
-    params.set("offset", String(currentPage * PAGE_SIZE));
-    const res = await fetch(`/api/hr/fiat?${params}`);
+    params.set("offset", String((p ?? page) * PAGE_SIZE));
+    return params;
+  };
+
+  const load = async (p?: number) => {
+    const res = await fetch(`/api/hr/fiat?${buildParams(p)}`);
     const data = await res.json();
     setTransactions(data.transactions || []);
     setTotal(data.total || 0);
   };
 
   const loadSummary = async () => {
-    const res = await fetch("/api/hr/fiat/summary");
+    const params = new URLSearchParams();
+    params.set("year", String(year));
+    if (month) params.set("month", String(month));
+    if (source) params.set("source", source);
+    const res = await fetch(`/api/hr/fiat/summary?${params}`);
     setSummary(await res.json());
   };
 
-  useEffect(() => { load(0); setPage(0); }, [currency, direction]);
+  useEffect(() => { setPage(0); load(0); loadSummary(); }, [year, month, currency, direction, source]);
   useEffect(() => { load(page); }, [page]);
-  useEffect(() => { loadSummary(); }, []);
 
   const handleUpload = async (type: "wise" | "aspire", e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -59,49 +74,14 @@ export default function FiatPage() {
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currencies = ["USD", "SGD", "GBP"];
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">법인 입출금</h1>
-      <p className="text-sm mb-6 text-gray-400">WISE / Aspire 법인통장 입출금 내역 (관리자 전용)</p>
-
-      {/* Summary Cards */}
-      {summary.length > 0 && (
-        <div className="grid grid-cols-4 gap-3 mb-6">
-          {["USD", "SGD", "GBP", "KRW"].map(cur => {
-            const inAmt = summary.find(s => s.currency === cur && s.direction === "IN")?.total_amount || 0;
-            const outAmt = summary.find(s => s.currency === cur && (s.direction === "OUT" || s.direction === "NEUTRAL"))?.total_amount || 0;
-            const inCnt = summary.find(s => s.currency === cur && s.direction === "IN")?.count || 0;
-            const outCnt = summary.find(s => s.currency === cur && (s.direction === "OUT" || s.direction === "NEUTRAL"))?.count || 0;
-            if (!inCnt && !outCnt) return null;
-            return (
-              <div key={cur} className="rounded-xl p-4 bg-white border border-gray-200">
-                <div className="text-xs text-gray-400 mb-1">{cur}</div>
-                <div className="text-sm text-emerald-600">+{fmt(Math.abs(inAmt))} ({inCnt})</div>
-                <div className="text-sm text-red-500">-{fmt(Math.abs(outAmt))} ({outCnt})</div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Upload + Filters */}
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-3">
-          <select value={currency} onChange={e => setCurrency(e.target.value)}
-            className="px-3 py-1.5 rounded-lg text-sm border border-gray-300">
-            <option value="">전체 통화</option>
-            <option value="USD">USD</option>
-            <option value="SGD">SGD</option>
-            <option value="GBP">GBP</option>
-          </select>
-          <select value={direction} onChange={e => setDirection(e.target.value)}
-            className="px-3 py-1.5 rounded-lg text-sm border border-gray-300">
-            <option value="">전체 방향</option>
-            <option value="IN">입금</option>
-            <option value="OUT">출금</option>
-          </select>
-          <span className="text-sm text-gray-500">{total}건 (page {page + 1}/{totalPages})</span>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">법인 입출금</h1>
+          <p className="text-sm text-gray-400">WISE / Aspire 법인통장 입출금 내역 (관리자 전용)</p>
         </div>
         <div className="flex gap-2">
           <label className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50 cursor-pointer">
@@ -113,6 +93,76 @@ export default function FiatPage() {
             <input type="file" accept=".xlsx,.xls" onChange={e => handleUpload("aspire", e)} className="hidden" disabled={uploading} />
           </label>
         </div>
+      </div>
+
+      {/* 연도 + 월 선택 */}
+      <div className="flex items-center gap-4 mb-4">
+        <select value={year} onChange={e => setYear(Number(e.target.value))}
+          className="px-3 py-1.5 rounded-lg text-sm border border-gray-300">
+          {[2023, 2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}년</option>)}
+        </select>
+        <div className="flex gap-1">
+          <button onClick={() => setMonth(null)}
+            className={`px-3 py-1.5 rounded text-xs font-medium ${!month ? "bg-[#2A72E5] text-white" : "bg-gray-50 text-gray-400 hover:bg-gray-100"}`}>
+            전체
+          </button>
+          {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+            <button key={m} onClick={() => setMonth(m)}
+              className={`px-3 py-1.5 rounded text-xs font-medium ${m === month ? "bg-[#2A72E5] text-white" : "bg-gray-50 text-gray-400 hover:bg-gray-100"}`}>
+              {m}월
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Summary Cards - 선택 기간 기준 */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        {currencies.map(cur => {
+          const inData = summary.find(s => s.currency === cur && s.direction === "IN");
+          const outData = summary.find(s => s.currency === cur && (s.direction === "OUT" || s.direction === "NEUTRAL"));
+          const inAmt = inData?.total_amount || 0;
+          const outAmt = outData?.total_amount || 0;
+          const inCnt = inData?.count || 0;
+          const outCnt = outData?.count || 0;
+          return (
+            <div key={cur} className={`rounded-xl p-4 bg-white border ${currency === cur ? "border-[#2A72E5] ring-1 ring-[#2A72E5]" : "border-gray-200"} cursor-pointer hover:shadow-sm transition`}
+              onClick={() => setCurrency(currency === cur ? "" : cur)}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold">{cur}</span>
+                {currency === cur && <span className="text-[10px] text-[#2A72E5]">selected</span>}
+              </div>
+              <div className="flex justify-between">
+                <div>
+                  <div className="text-xs text-gray-400">입금</div>
+                  <div className="text-sm font-semibold text-emerald-600">+{fmt(Math.abs(inAmt))}</div>
+                  <div className="text-[10px] text-gray-400">{inCnt}건</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-gray-400">출금</div>
+                  <div className="text-sm font-semibold text-red-500">-{fmt(Math.abs(outAmt))}</div>
+                  <div className="text-[10px] text-gray-400">{outCnt}건</div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 추가 필터: 소스 + 방향 + 건수 */}
+      <div className="flex items-center gap-3 mb-4">
+        <select value={source} onChange={e => setSource(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-sm border border-gray-300">
+          <option value="">전체 소스</option>
+          <option value="WISE">WISE</option>
+          <option value="Aspire">Aspire</option>
+        </select>
+        <select value={direction} onChange={e => setDirection(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-sm border border-gray-300">
+          <option value="">전체 방향</option>
+          <option value="IN">입금</option>
+          <option value="OUT">출금</option>
+        </select>
+        <span className="text-sm text-gray-500 ml-auto">{total}건 (page {page + 1}/{totalPages})</span>
       </div>
 
       {/* Table */}
@@ -162,7 +212,7 @@ export default function FiatPage() {
               </tr>
             ))}
             {transactions.length === 0 && (
-              <tr><td colSpan={9} className="py-8 text-center text-gray-400">입출금 내역이 없습니다. WISE CSV 또는 Aspire Excel을 업로드하세요.</td></tr>
+              <tr><td colSpan={9} className="py-8 text-center text-gray-400">해당 기간의 입출금 내역이 없습니다</td></tr>
             )}
           </tbody>
         </table>

@@ -69,27 +69,10 @@ export default function Expenses() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-1">경비 정산</h1>
-      <p className="text-sm mb-6 text-gray-400">{year}년 경비 정산 현황</p>
-
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-4">
-          <select value={year} onChange={e => setYear(Number(e.target.value))}
-            className="px-3 py-1.5 rounded-lg text-sm border border-gray-300 focus:outline-none focus:border-[#2A72E5]">
-            {[2023, 2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}년</option>)}
-          </select>
-          <div className="flex gap-1">
-            <button onClick={() => setMonth(null)}
-              className={`px-3 py-1.5 rounded text-xs font-medium ${!month ? 'bg-[#2A72E5] text-white' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
-              전체
-            </button>
-            {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
-              <button key={m} onClick={() => setMonth(m)}
-                className={`px-3 py-1.5 rounded text-xs font-medium ${m === month ? 'bg-[#2A72E5] text-white' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
-                {m}월
-              </button>
-            ))}
-          </div>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold mb-1">경비 정산</h1>
+          <p className="text-sm text-gray-400">{year}년 경비 정산 현황</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => window.open("/api/hr/expenses/template", "_blank")}
@@ -114,6 +97,25 @@ export default function Expenses() {
             className="px-3 py-2 rounded-lg text-sm font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC]">
             + 경비 추가
           </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 mb-4">
+        <select value={year} onChange={e => setYear(Number(e.target.value))}
+          className="px-3 py-1.5 rounded-lg text-sm border border-gray-300 focus:outline-none focus:border-[#2A72E5]">
+          {[2023, 2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}년</option>)}
+        </select>
+        <div className="flex gap-1">
+          <button onClick={() => setMonth(null)}
+            className={`px-3 py-1.5 rounded text-xs font-medium ${!month ? 'bg-[#2A72E5] text-white' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
+            전체
+          </button>
+          {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+            <button key={m} onClick={() => setMonth(m)}
+              className={`px-3 py-1.5 rounded text-xs font-medium ${m === month ? 'bg-[#2A72E5] text-white' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}>
+              {m}월
+            </button>
+          ))}
         </div>
       </div>
 

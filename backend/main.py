@@ -2393,11 +2393,12 @@ class PayslipRequest(BaseModel):
     transaction_url: str = ""
     payment_year: int
     payment_month: int
-    service_fee_usdt: float
-    exchange_rate: float
-    income_tax_krw: int
-    local_tax_krw: int
-    total_tax_krw: int
+    service_fee_usdt: float = 0
+    exchange_rate: float = 0
+    krw_amount: int = 0
+    income_tax_krw: int = 0
+    local_tax_krw: int = 0
+    total_tax_krw: int = 0
     tax_percentage: int = 100
 
 @app.get("/api/hr/generate-payslip")

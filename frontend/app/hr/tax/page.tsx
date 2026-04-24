@@ -17,7 +17,9 @@ interface TaxResult {
 }
 
 export default function TaxCalculator() {
+  const [inputMode, setInputMode] = useState<"USDT" | "KRW">("USDT");
   const [usdt, setUsdt] = useState("");
+  const [krwDirect, setKrwDirect] = useState("");
   const [rateDate, setRateDate] = useState("");
   const [exchangeRate, setExchangeRate] = useState("");
   const [rateLoading, setRateLoading] = useState(false);
@@ -53,9 +55,11 @@ export default function TaxCalculator() {
     fetchRate();
   }, [rateDate]);
 
-  const krwAmount = usdt && exchangeRate ? Math.round(parseFloat(usdt) * parseFloat(exchangeRate)) : 0;
+  const krwAmount = inputMode === "KRW"
+    ? (krwDirect ? parseInt(krwDirect) : 0)
+    : (usdt && exchangeRate ? Math.round(parseFloat(usdt) * parseFloat(exchangeRate)) : 0);
   const childrenNum = children ? parseInt(children) : 0;
-  const canCalculate = parseFloat(usdt) > 0 && parseFloat(exchangeRate) > 0 && dependents >= 1;
+  const canCalculate = krwAmount > 0 && dependents >= 1;
 
   const handleCalculate = async () => {
     if (!canCalculate) return;
@@ -88,68 +92,75 @@ export default function TaxCalculator() {
 
       {/* Input Section */}
       <div className="max-w-2xl space-y-5 mb-8">
-        {/* 1. 월 서비스 Fee (USDT) */}
+        {/* 1. 입력 방식 선택 + 금액 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            1. 월 서비스 Fee (USDT)
+            1. 월 서비스 Fee
           </label>
-          <div className="relative">
-            <input
-              type="number"
-              value={usdt}
-              onChange={(e) => setUsdt(e.target.value)}
-              placeholder="0"
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A72E5]/30 focus:border-[#2A72E5]"
-            />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">USDT</span>
+          <div className="flex gap-2 mb-2">
+            <button onClick={() => setInputMode("USDT")}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${inputMode === "USDT" ? "bg-[#2A72E5] text-white" : "bg-gray-50 text-gray-500 border border-gray-200"}`}>
+              USDT 입력
+            </button>
+            <button onClick={() => setInputMode("KRW")}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${inputMode === "KRW" ? "bg-[#2A72E5] text-white" : "bg-gray-50 text-gray-500 border border-gray-200"}`}>
+              KRW 직접 입력
+            </button>
           </div>
-        </div>
-
-        {/* 2. 환율 — 날짜 선택 + 자동 조회 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            2. USD-KRW 마감환율
-          </label>
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <input
-                type="date"
-                value={rateDate}
-                onChange={(e) => setRateDate(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A72E5]/30 focus:border-[#2A72E5]"
-              />
+          {inputMode === "USDT" ? (
+            <div className="relative">
+              <input type="number" value={usdt} onChange={(e) => setUsdt(e.target.value)} placeholder="0"
+                className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A72E5]/30 focus:border-[#2A72E5]" />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">USDT</span>
             </div>
-            <div className="flex-1 relative">
-              <input
-                type="number"
-                value={exchangeRate}
-                onChange={(e) => { setExchangeRate(e.target.value); setRateSource("직접 입력"); }}
-                placeholder={rateLoading ? "조회 중..." : "날짜 선택 시 자동 입력"}
-                step="0.01"
-                className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A72E5]/30 focus:border-[#2A72E5]"
-              />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">
-                {rateLoading ? "⏳" : "KRW/USD"}
-              </span>
+          ) : (
+            <div className="relative">
+              <input type="number" value={krwDirect} onChange={(e) => setKrwDirect(e.target.value)} placeholder="0"
+                className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A72E5]/30 focus:border-[#2A72E5]" />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">KRW</span>
             </div>
-          </div>
-          {rateSource && (
-            <p className={`text-xs mt-1.5 ${rateSource.includes("실패") ? "text-red-400" : "text-gray-400"}`}>
-              📌 {rateSource}
-            </p>
           )}
         </div>
+
+        {/* 2. 환율 (USDT 모드만) */}
+        {inputMode === "USDT" && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              2. USD-KRW 마감환율
+            </label>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <input type="date" value={rateDate} onChange={(e) => setRateDate(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A72E5]/30 focus:border-[#2A72E5]" />
+              </div>
+              <div className="flex-1 relative">
+                <input type="number" value={exchangeRate}
+                  onChange={(e) => { setExchangeRate(e.target.value); setRateSource("직접 입력"); }}
+                  placeholder={rateLoading ? "조회 중..." : "날짜 선택 시 자동 입력"} step="0.01"
+                  className="w-full px-4 py-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#2A72E5]/30 focus:border-[#2A72E5]" />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">
+                  {rateLoading ? "⏳" : "KRW/USD"}
+                </span>
+              </div>
+            </div>
+            {rateSource && (
+              <p className={`text-xs mt-1.5 ${rateSource.includes("실패") ? "text-red-400" : "text-gray-400"}`}>
+                📌 {rateSource}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* 3. 환산 KRW 금액 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            3. 환산 월 급여액 (KRW)
+            {inputMode === "USDT" ? "3. 환산 월 급여액 (KRW)" : "2. 월 급여액 (KRW)"}
           </label>
           <div className="w-full px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-sm">
             {krwAmount > 0 ? (
               <span className="font-semibold text-[#2A72E5]">₩{fmt(krwAmount)}</span>
             ) : (
-              <span className="text-gray-400">위 항목을 입력하면 자동 계산됩니다</span>
+              <span className="text-gray-400">{inputMode === "USDT" ? "위 항목을 입력하면 자동 계산됩니다" : "KRW 금액을 입력하세요"}</span>
             )}
           </div>
         </div>
@@ -157,7 +168,7 @@ export default function TaxCalculator() {
         {/* 4. 공제대상 가족 수 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            4. 공제대상 가족 수 (본인 포함)
+            {inputMode === "USDT" ? "4" : "3"}. 공제대상 가족 수 (본인 포함)
           </label>
           <select
             value={dependents}
@@ -175,7 +186,7 @@ export default function TaxCalculator() {
         {/* 5. 8~20세 자녀 수 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            5. 공제대상 가족 중 8세 이상 20세 이하 자녀 수
+            {inputMode === "USDT" ? "5" : "4"}. 공제대상 가족 중 8세 이상 20세 이하 자녀 수
           </label>
           <input
             type="number"

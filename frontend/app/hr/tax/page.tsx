@@ -305,8 +305,10 @@ export default function TaxCalculator() {
       {result && (
         <PayslipSection
           result={result}
-          serviceFeeUsdt={parseFloat(usdt)}
-          exchangeRate={parseFloat(exchangeRate)}
+          inputMode={inputMode}
+          serviceFeeUsdt={inputMode === "USDT" ? parseFloat(usdt) : 0}
+          exchangeRate={inputMode === "USDT" ? parseFloat(exchangeRate) : 0}
+          krwAmount={krwAmount}
         />
       )}
     </div>
@@ -318,12 +320,16 @@ export default function TaxCalculator() {
 
 function PayslipSection({
   result,
+  inputMode,
   serviceFeeUsdt,
   exchangeRate,
+  krwAmount,
 }: {
   result: TaxResult;
+  inputMode: "USDT" | "KRW";
   serviceFeeUsdt: number;
   exchangeRate: number;
+  krwAmount: number;
 }) {
   const [contractorName, setContractorName] = useState("");
   const [erc20Address, setErc20Address] = useState("");
@@ -359,7 +365,7 @@ function PayslipSection({
   const periodEnd = pYear && pMonth ? fmtDate(new Date(pYear, pMonth, 0)) : "";
   const paymentDate = pYear && pMonth ? getLastBusinessDay(pYear, pMonth) : "";
 
-  const canDownload = contractorName.trim() && payMonth && serviceFeeUsdt > 0;
+  const canDownload = contractorName.trim() && payMonth && (serviceFeeUsdt > 0 || krwAmount > 0);
 
   const handleDownload = async () => {
     if (!canDownload) return;
@@ -374,8 +380,9 @@ function PayslipSection({
           transaction_url: txUrl,
           payment_year: pYear,
           payment_month: pMonth,
-          service_fee_usdt: serviceFeeUsdt,
-          exchange_rate: exchangeRate,
+          service_fee_usdt: inputMode === "USDT" ? serviceFeeUsdt : 0,
+          exchange_rate: inputMode === "USDT" ? exchangeRate : 0,
+          krw_amount: krwAmount,
           income_tax_krw: selectedTax.income,
           local_tax_krw: selectedTax.local,
           total_tax_krw: selectedTax.total,
@@ -484,22 +491,41 @@ function PayslipSection({
         {/* Preview summary */}
         {payMonth && (
           <div className="rounded-lg bg-gray-50 p-4 text-sm space-y-1.5">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Service Fee (USDT)</span>
-              <span className="font-medium">{serviceFeeUsdt.toLocaleString()} USDT</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Tax Total ({taxPct}%, USDT 환산)</span>
-              <span className="font-medium text-red-500">
-                {exchangeRate > 0 ? Math.ceil(selectedTax.total / exchangeRate / 10) * 10 : 0} USDT
-              </span>
-            </div>
-            <div className="flex justify-between border-t border-gray-200 pt-1.5">
-              <span className="text-gray-700 font-semibold">Net Service Fee (USDT)</span>
-              <span className="font-bold text-[#2A72E5]">
-                {exchangeRate > 0 ? serviceFeeUsdt - Math.ceil(selectedTax.total / exchangeRate / 10) * 10 : 0} USDT
-              </span>
-            </div>
+            {inputMode === "USDT" ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Service Fee (USDT)</span>
+                  <span className="font-medium">{serviceFeeUsdt.toLocaleString()} USDT</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Tax Total ({taxPct}%, USDT 환산)</span>
+                  <span className="font-medium text-red-500">
+                    {exchangeRate > 0 ? Math.ceil(selectedTax.total / exchangeRate / 10) * 10 : 0} USDT
+                  </span>
+                </div>
+                <div className="flex justify-between border-t border-gray-200 pt-1.5">
+                  <span className="text-gray-700 font-semibold">Net Service Fee (USDT)</span>
+                  <span className="font-bold text-[#2A72E5]">
+                    {exchangeRate > 0 ? serviceFeeUsdt - Math.ceil(selectedTax.total / exchangeRate / 10) * 10 : 0} USDT
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">월 급여액 (KRW)</span>
+                  <span className="font-medium">₩{krwAmount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">세금 합계 ({taxPct}%)</span>
+                  <span className="font-medium text-red-500">₩{selectedTax.total.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between border-t border-gray-200 pt-1.5">
+                  <span className="text-gray-700 font-semibold">세후 수령액 (Net)</span>
+                  <span className="font-bold text-[#2A72E5]">₩{(krwAmount - selectedTax.total).toLocaleString()}</span>
+                </div>
+              </>
+            )}
           </div>
         )}
 

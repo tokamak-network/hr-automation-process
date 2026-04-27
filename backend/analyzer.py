@@ -105,25 +105,29 @@ async def recommend_reviewers(candidate_scores: Dict[str, Any], repo_analysis: D
 # Domain keywords extracted from repo content (README, code, file names)
 DOMAIN_KEYWORDS = {
     # L2 / Rollup
-    "rollup": ["rollup", "optimistic", "op-stack", "thanos", "l2", "layer2", "layer-2"],
-    "sequencer": ["sequencer", "op-batcher", "op-proposer", "op-node", "op-geth", "batch"],
-    "bridge": ["bridge", "cross-chain", "cross-layer", "deposit", "withdraw", "portal", "l1-l2"],
+    "rollup": ["rollup", "optimistic", "op-stack", "thanos", "l2", "layer2", "layer-2", "l2 rollup", "rollup hub"],
+    "sequencer": ["sequencer", "op-batcher", "op-proposer", "op-node", "op-geth", "batch", "finality", "block producer"],
+    "bridge": ["bridge", "cross-chain", "cross-layer", "deposit", "withdraw", "withdrawal", "portal", "l1-l2", "l1 l2"],
+    # Ethereum / On-chain
+    "ethereum": ["ethereum", "eth", "eip", "rpc", "viem", "ethers.js", "ethersjs", "web3.js", "web3js", "on-chain", "onchain", "block", "transaction", "gas"],
     # Smart Contracts
-    "smart-contracts": ["smart-contract", "solidity", "evm", "opcode", "abi", "deploy"],
-    "staking": ["staking", "stake", "unstake", "seigniorage", "seig", "ton-staking", "validator"],
+    "smart-contracts": ["smart-contract", "smart contract", "solidity", "evm", "opcode", "abi", "deploy", "hardhat", "foundry", "forge"],
+    "staking": ["staking", "stake", "unstake", "seigniorage", "seig", "ton-staking", "validator", "delegation"],
     "dao": ["dao", "governance", "vote", "proposal", "agenda"],
     # ZK
-    "zk": ["zk", "zero-knowledge", "zk-proof", "snark", "stark", "circom", "plonk", "groth16"],
+    "zk": ["zk", "zero-knowledge", "zero knowledge", "zk-proof", "snark", "stark", "circom", "plonk", "groth16"],
     # DeFi
     "defi": ["defi", "swap", "liquidity", "pool", "amm", "uniswap", "lending", "yield"],
-    "token": ["erc20", "erc-20", "erc721", "erc-721", "token", "mint", "burn", "transfer"],
+    "token": ["erc20", "erc-20", "erc721", "erc-721", "token", "mint", "burn", "transfer", "erc1155"],
     # Tokamak specific
-    "tokamak": ["tokamak", "thanos", "trh", "titan", "ton-staking", "seigmanager", "tokamak-network"],
-    "monitor": ["monitor", "dashboard", "metrics", "health", "analytics", "chain-monitor"],
+    "tokamak": ["tokamak", "thanos", "trh", "titan", "ton-staking", "seigmanager", "tokamak-network", "tokamak network"],
+    "monitor": ["monitor", "monitoring", "dashboard", "metrics", "health", "analytics", "chain-monitor", "chain monitor", "chain health", "real-time"],
     # Infra
-    "frontend": ["react", "next.js", "nextjs", "frontend", "ui", "ux", "webapp", "dashboard"],
-    "backend": ["api", "server", "fastapi", "express", "backend", "database"],
+    "frontend": ["react", "next.js", "nextjs", "frontend", "ui", "ux", "webapp"],
+    "backend": ["api", "server", "fastapi", "express", "backend", "database", "graphql"],
     "devops": ["docker", "ci/cd", "deploy", "kubernetes", "terraform", "infra"],
+    # AI
+    "ai": ["ai", "llm", "machine learning", "ml", "agent", "chatbot", "openai", "gpt"],
 }
 
 # Map team repos to domain expertise

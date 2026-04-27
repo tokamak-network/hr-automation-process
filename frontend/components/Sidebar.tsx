@@ -6,6 +6,7 @@ const sections = [
   {
     title: "채용",
     items: [
+      { href: "/", label: "Candidates", icon: "📋" },
       { href: "/submit", label: "Submit", icon: "📝" },
       { href: "/monitor", label: "Monitor", icon: "📡" },
       { href: "/linkedin", label: "Developer Sourcing", icon: "🔍" },

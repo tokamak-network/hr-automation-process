@@ -19,7 +19,7 @@ from team_profiler import scan_org_profiles
 from linkedin_google import search_linkedin_candidates, get_linkedin_candidates, update_candidate_status as update_linkedin_status, init_linkedin_db
 from github_linkedin import bridge_github_candidates
 from github_sourcing import search_github_developers
-from matching import match_candidate_to_team
+# matching.py is now unified into analyzer.py (recommend_reviewers)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -881,11 +881,59 @@ async def linkedin_bridge():
 
 @app.get("/api/candidates/{candidate_id}/match")
 async def get_candidate_match(candidate_id: int):
-    """Get team matching scores for a candidate."""
-    result = match_candidate_to_team(candidate_id)
-    if "error" in result:
-        raise HTTPException(status_code=404, detail=result["error"])
-    return result
+    """Get team matching scores — unified with recommended-reviewers engine."""
+    db = await get_db()
+    row = await db.execute("SELECT * FROM candidates WHERE id = ?", (candidate_id,))
+    candidate = await row.fetchone()
+    if not candidate:
+        await db.close()
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    repo_analysis = json.loads(candidate["repo_analysis"]) if candidate["repo_analysis"] else {}
+
+    # Use unified reviewer matching (language + domain)
+    from analyzer import recommend_reviewers, _extract_domain_keywords
+    all_reviewers = await recommend_reviewers({}, repo_analysis, db, exclude_email=None)
+
+    # Extract candidate skills for display
+    candidate_domains = _extract_domain_keywords(repo_analysis)
+    candidate_langs = {}
+    for lang in repo_analysis.get("languages", {}).keys():
+        candidate_langs[lang.lower()] = min(1.0, repo_analysis["languages"][lang] / 100) if isinstance(repo_analysis["languages"][lang], (int, float)) else 0.5
+    candidate_skills = {**candidate_langs, **{k: min(1.0, v/3) for k, v in candidate_domains.items()}}
+
+    # Build response matching existing frontend format
+    matches = []
+    for r in all_reviewers:
+        score_pct = round(min(100, r["match_score"] * 2), 1)
+        matches.append({
+            "github_username": r["github"],
+            "display_name": r["name"],
+            "match_score": score_pct,
+            "matched_skills": r["matching_skills"],
+            "top_repos": [],
+            "domain_match": r.get("domain_match", []),
+            "why": r.get("why", ""),
+        })
+
+    # Fill top_repos from profiles
+    rows = await db.execute("SELECT github_username, top_repos FROM team_profiles WHERE is_active=1")
+    profiles = {r["github_username"]: json.loads(r["top_repos"]) if r["top_repos"] else [] for r in await rows.fetchall()}
+    for m in matches:
+        m["top_repos"] = profiles.get(m["github_username"], [])[:3]
+
+    await db.close()
+    return {
+        "candidate": {
+            "id": candidate["id"],
+            "name": candidate["name"],
+            "repo_url": candidate["repo_url"],
+            "description": candidate["description"],
+            "extracted_skills": candidate_skills,
+        },
+        "matches": matches,
+        "recommended_reviewers": matches[:3],
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -40,10 +40,6 @@ export default function CandidateDetail() {
 
   useEffect(() => {
     fetch(`${API}/api/candidates/${id}`).then(r => r.json()).then(setCandidate);
-    fetch(`${API}/api/candidates/${id}/recommended-reviewers`)
-      .then(r => r.json())
-      .then(data => setReviewers(data.reviewers || []))
-      .catch(() => {});
     fetch(`${API}/api/candidates/${id}/match`)
       .then(r => r.json())
       .then(setMatchData)
@@ -116,40 +112,10 @@ export default function CandidateDetail() {
         </div>
       )}
 
-      {reviewers.length > 0 && (
-        <div className="mb-6 rounded-lg p-6 border border-gray-200 bg-white">
-          <h2 className="font-semibold mb-3 text-gray-900">👥 Recommended Reviewers</h2>
-          <div className="grid grid-cols-3 gap-3">
-            {reviewers.map(r => (
-              <div key={r.github} className="rounded-lg p-4 border border-gray-200 bg-gray-50">
-                <div className="flex items-center gap-2 mb-2">
-                  {r.avatar_url && <img src={r.avatar_url} alt={r.github} className="w-8 h-8 rounded-full" />}
-                  <div>
-                    <div className="font-medium text-[#2A72E5]">{r.name}</div>
-                    <a href={`https://github.com/${r.github}`} className="text-xs text-gray-400 hover:underline" target="_blank">@{r.github}</a>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {r.matching_skills.map(s => {
-                    const score = r.expertise?.[s];
-                    const color = score && score >= 0.7 ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700";
-                    return (
-                      <span key={s} className={`${color} text-xs px-2 py-0.5 rounded`}>
-                        {s}{score ? ` ${Math.round(score * 100)}%` : ""}
-                      </span>
-                    );
-                  })}
-                </div>
-                {r.why && <p className="text-xs italic text-gray-400">{r.why}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {matchData && (
         <div className="mb-6 rounded-lg p-6 border border-gray-200 bg-white">
-          <h2 className="font-semibold mb-4 text-gray-900">🎯 Team Matching</h2>
+          <h2 className="font-semibold mb-4 text-gray-900">🎯 Recommended Reviewers & Team Matching</h2>
           
           {/* Candidate Skills */}
           <div className="mb-4">
@@ -199,8 +165,11 @@ export default function CandidateDetail() {
                       </span>
                     ))}
                   </div>
-                  {m.top_repos.length > 0 && (
-                    <div className="text-[10px] text-gray-400 mt-1 truncate">
+                  {m.why && (
+                    <div className="text-[10px] text-gray-500 mt-1 italic">{m.why}</div>
+                  )}
+                  {m.top_repos?.length > 0 && (
+                    <div className="text-[10px] text-gray-400 mt-0.5 truncate">
                       {m.top_repos.map(r => r.name).join(" · ")}
                     </div>
                   )}

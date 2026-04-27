@@ -47,7 +47,7 @@ export default function CandidatesPage() {
         <div className="rounded-lg overflow-hidden border border-gray-200">
           <table className="w-full text-sm">
             <thead><tr className="text-left text-gray-500 border-b border-gray-200 bg-gray-50">
-              <th className="py-3 px-4">Name</th><th className="py-3 px-4">Email</th><th className="py-3 px-4">Status</th><th className="py-3 px-4">Avg Score</th><th className="py-3 px-4">Recommendation</th><th className="py-3 px-4">Actions</th>
+              <th className="py-3 px-4">Name</th><th className="py-3 px-4">Email</th><th className="py-3 px-4">Status</th><th className="py-3 px-4">Avg Score</th><th className="py-3 px-4">Recommendation</th><th className="py-3 px-4 text-center w-[140px]">Actions</th>
             </tr></thead>
             <tbody>
               {candidates.map(c => (
@@ -58,7 +58,7 @@ export default function CandidatesPage() {
                   <td className="py-3 px-4">{avgScore(c.scores)}</td>
                   <td className={`py-3 px-4 font-medium ${recColor[c.recommendation || ""] || ""}`}>{c.recommendation || "-"}</td>
                   <td className="py-3 px-4">
-                    <div className="flex gap-2 items-center">
+                    <div className="flex gap-2 items-center justify-center">
                       {c.status === "submitted" && <button onClick={() => triggerAnalysis(c.id)} className="text-xs px-3 py-1 rounded font-medium text-white bg-[#1C1C1C] hover:bg-gray-800">Analyze</button>}
                       {c.status === "analyzed" && <a href={`/candidates/${c.id}`} className="text-[#2A72E5] text-xs hover:underline">View</a>}
                       <button onClick={() => handleDelete(c.id, c.name)} className="text-xs text-red-500 hover:underline">삭제</button>

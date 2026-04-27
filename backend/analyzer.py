@@ -6,6 +6,9 @@ import subprocess
 from pathlib import Path
 from collections import Counter
 from typing import List, Dict, Any, Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 TEAM_MEMBERS = {
     "amrtokmak", "SonYoungsung", "zzooppii", "ireneeeeeee0", "Jaden-Kong",
@@ -352,9 +355,12 @@ async def analyze_repo(repo_url: str) -> dict:
 
 async def ai_analyze(repo_analysis: dict, description: str = "") -> dict:
     """Call AI to generate qualitative analysis and scores with Track B criteria."""
-    api_url = os.getenv("AI_API_URL", "https://api.openai.com/v1/chat/completions")
-    api_key = os.getenv("AI_API_KEY", "")
-    model = os.getenv("AI_MODEL", "gpt-4o-mini")
+    api_url = os.getenv("TOKAMAK_API_URL", os.getenv("AI_API_URL", "https://api.openai.com/v1/chat/completions"))
+    api_key = os.getenv("TOKAMAK_API_KEY", os.getenv("AI_API_KEY", ""))
+    model = os.getenv("TOKAMAK_MODEL", os.getenv("AI_MODEL", "gpt-4o-mini"))
+    # Ensure URL ends with /chat/completions for OpenAI-compatible APIs
+    if api_url and not api_url.endswith("/chat/completions"):
+        api_url = api_url.rstrip("/") + "/v1/chat/completions"
 
     if not api_key:
         return _fallback_scores(repo_analysis)
@@ -448,9 +454,12 @@ Return ONLY valid JSON.""".format(
             }, json={
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.3,
+                "max_tokens": 4096,
             })
             data = resp.json()
+            if "error" in data:
+                print(f"AI API error: {data['error']}")
+                return _fallback_scores(repo_analysis)
             content = data["choices"][0]["message"]["content"]
             if content.startswith("```"):
                 content = content.split("\n", 1)[1].rsplit("```", 1)[0]

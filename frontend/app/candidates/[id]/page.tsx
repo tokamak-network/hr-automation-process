@@ -67,15 +67,35 @@ export default function CandidateDetail() {
   return (
     <div>
       <a href="/" className="text-sm text-gray-400 hover:text-gray-700 transition">← Back</a>
-      <h1 className="text-2xl font-bold mt-2 mb-1 text-gray-900">{candidate.name}</h1>
-      <p className="text-sm text-gray-500 mb-2">
-        {candidate.email} · <a href={candidate.repo_url} className="text-[#2A72E5] hover:underline" target="_blank">{candidate.repo_url}</a>
+      <h1 className="text-2xl font-bold mt-2 mb-4 text-gray-900">{candidate.name}</h1>
+      <div className="grid grid-cols-2 gap-3 mb-4 max-w-2xl">
+        <div className="rounded-lg p-3 bg-white border border-gray-200">
+          <div className="text-[10px] text-gray-400 mb-0.5">Email</div>
+          <div className="text-sm text-gray-700">{candidate.email}</div>
+        </div>
+        <div className="rounded-lg p-3 bg-white border border-gray-200">
+          <div className="text-[10px] text-gray-400 mb-0.5">Repository</div>
+          <a href={candidate.repo_url} className="text-sm text-[#2A72E5] hover:underline break-all" target="_blank">{candidate.repo_url}</a>
+        </div>
         {candidate.demo_url && (
-          <> · <a href={candidate.demo_url} className="text-emerald-600 hover:underline" target="_blank">Demo</a></>
+          <div className="rounded-lg p-3 bg-white border border-gray-200">
+            <div className="text-[10px] text-gray-400 mb-0.5">Demo</div>
+            <a href={candidate.demo_url} className="text-sm text-emerald-600 hover:underline break-all" target="_blank">{candidate.demo_url}</a>
+          </div>
         )}
-      </p>
-      {candidate.analyzed_by && <p className="text-xs text-gray-400 mb-1">Analyzed by: {candidate.analyzed_by}</p>}
-      {candidate.reviewed_by && <p className="text-xs text-gray-400 mb-1">Reviewed by: {candidate.reviewed_by}</p>}
+        {candidate.description && (
+          <div className={`rounded-lg p-3 bg-white border border-gray-200 ${candidate.demo_url ? "" : "col-span-2"}`}>
+            <div className="text-[10px] text-gray-400 mb-0.5">Description</div>
+            <div className="text-sm text-gray-700 line-clamp-3">{candidate.description}</div>
+          </div>
+        )}
+      </div>
+      {(candidate.analyzed_by || candidate.reviewed_by) && (
+        <div className="text-xs text-gray-400 mb-2 flex gap-4">
+          {candidate.analyzed_by && <span>Analyzed by: {candidate.analyzed_by}</span>}
+          {candidate.reviewed_by && <span>Reviewed by: {candidate.reviewed_by}</span>}
+        </div>
+      )}
 
       {candidate.weighted_score != null && (
         <div className="mb-6 mt-4 p-4 rounded-lg border border-blue-200 bg-blue-50">

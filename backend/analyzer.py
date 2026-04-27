@@ -117,6 +117,9 @@ DOMAIN_KEYWORDS = {
     # DeFi
     "defi": ["defi", "swap", "liquidity", "pool", "amm", "uniswap", "lending", "yield"],
     "token": ["erc20", "erc-20", "erc721", "erc-721", "token", "mint", "burn", "transfer"],
+    # Tokamak specific
+    "tokamak": ["tokamak", "thanos", "trh", "titan", "ton-staking", "seigmanager", "tokamak-network"],
+    "monitor": ["monitor", "dashboard", "metrics", "health", "analytics", "chain-monitor"],
     # Infra
     "frontend": ["react", "next.js", "nextjs", "frontend", "ui", "ux", "webapp", "dashboard"],
     "backend": ["api", "server", "fastapi", "express", "backend", "database"],
@@ -141,16 +144,23 @@ REPO_DOMAIN_MAP = {
     "ethrex": ["rollup", "sequencer"],
     "secure-vote": ["zk", "dao"],
     "tokamon": ["token", "defi"],
+    "trh-sdk": ["rollup", "tokamak", "sequencer"],
+    "tokamak-thanos-event-listener": ["rollup", "monitor", "tokamak"],
+    "sentinai": ["monitor", "backend"],
+    "auto-research-press": ["backend", "tokamak"],
+    "hr-automation-process": ["backend", "frontend", "tokamak"],
 }
 
 
-def _extract_domain_keywords(repo_analysis: Dict[str, Any]) -> Dict[str, float]:
-    """Extract domain keywords from candidate repo content with relevance scores."""
+def _extract_domain_keywords(repo_analysis: Dict[str, Any], candidate_description: str = "", candidate_report: str = "") -> Dict[str, float]:
+    """Extract domain keywords from candidate repo content, description, and report."""
     text = " ".join([
         (repo_analysis.get("readme_full", "") or ""),
         (repo_analysis.get("description", "") or ""),
         " ".join(repo_analysis.get("languages", {}).keys()),
         " ".join(repo_analysis.get("file_list", [])[:100]) if repo_analysis.get("file_list") else "",
+        candidate_description,
+        candidate_report,
     ]).lower()
 
     domain_scores: Dict[str, float] = {}
@@ -198,8 +208,10 @@ def _match_from_profiles(profiles, repo_analysis: Dict[str, Any], exclude_email:
             for kw in mapping.get(lang_lower, []):
                 candidate_lang_keywords.add(kw)
 
-    # 2. Domain-based keywords from repo content
-    candidate_domains = _extract_domain_keywords(repo_analysis) if repo_analysis else {}
+    # 2. Domain-based keywords from repo content + description + report
+    desc = repo_analysis.get("_candidate_description", "") if repo_analysis else ""
+    report = repo_analysis.get("_candidate_report", "") if repo_analysis else ""
+    candidate_domains = _extract_domain_keywords(repo_analysis, desc, report) if repo_analysis else {}
 
     recommendations = []
     for profile in profiles:

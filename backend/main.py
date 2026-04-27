@@ -891,12 +891,17 @@ async def get_candidate_match(candidate_id: int):
 
     repo_analysis = json.loads(candidate["repo_analysis"]) if candidate["repo_analysis"] else {}
 
-    # Use unified reviewer matching (language + domain)
+    # Use unified reviewer matching (language + domain + description)
     from analyzer import recommend_reviewers, _extract_domain_keywords
+    desc = candidate["description"] or ""
+    report = candidate["report"] or ""
+    # Pass description/report to reviewer matching
+    repo_analysis["_candidate_description"] = desc
+    repo_analysis["_candidate_report"] = report
     all_reviewers = await recommend_reviewers({}, repo_analysis, db, exclude_email=None)
 
     # Extract candidate skills for display
-    candidate_domains = _extract_domain_keywords(repo_analysis)
+    candidate_domains = _extract_domain_keywords(repo_analysis, desc, report)
     candidate_langs = {}
     for lang in repo_analysis.get("languages", {}).keys():
         candidate_langs[lang.lower()] = min(1.0, repo_analysis["languages"][lang] / 100) if isinstance(repo_analysis["languages"][lang], (int, float)) else 0.5

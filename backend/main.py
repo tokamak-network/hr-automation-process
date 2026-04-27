@@ -44,6 +44,7 @@ class CandidateSubmission(BaseModel):
     name: str
     email: str
     repo_url: str
+    demo_url: str = ""
     description: str = ""
 
 
@@ -78,8 +79,8 @@ async def get_current_user(request: Request):
 async def submit_candidate(data: CandidateSubmission):
     db = await get_db()
     cursor = await db.execute(
-        "INSERT INTO candidates (name, email, repo_url, description) VALUES (?, ?, ?, ?)",
-        (data.name, data.email, data.repo_url, data.description)
+        "INSERT INTO candidates (name, email, repo_url, demo_url, description) VALUES (?, ?, ?, ?, ?)",
+        (data.name, data.email, data.repo_url, data.demo_url, data.description)
     )
     await db.commit()
     cid = cursor.lastrowid
@@ -102,7 +103,12 @@ async def analyze_candidate(candidate_id: int, request: Request):
         await db.close()
         raise HTTPException(400, repo_analysis["error"])
 
-    ai_result = await ai_analyze(repo_analysis, candidate["description"])
+    demo_url = ""
+    try:
+        demo_url = candidate["demo_url"] or ""
+    except (KeyError, IndexError):
+        pass
+    ai_result = await ai_analyze(repo_analysis, candidate["description"], demo_url)
 
     track_b = ai_result.get("track_b", {})
     weighted_score = ai_result.get("weighted_score", 0)

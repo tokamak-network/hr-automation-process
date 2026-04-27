@@ -54,8 +54,8 @@ export default function CandidateDetail() {
     technical_completeness: "Technical Completeness",
     ecosystem_fit: "Ecosystem Fit (2x)",
     tokenomics_impact: "Tokenomics Impact",
-    innovation: "Innovation",
-    ai_proficiency: "AI Proficiency",
+    documentation: "Documentation",
+    deliverable_completeness: "Deliverable Completeness",
   };
 
   const trackBColor: Record<string, string> = {

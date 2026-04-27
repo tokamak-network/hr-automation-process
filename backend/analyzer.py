@@ -30,8 +30,8 @@ SCORE_WEIGHTS = {
     "technical_completeness": 1.0,
     "ecosystem_fit": 2.0,  # 2x weight
     "tokenomics_impact": 1.0,
-    "innovation": 1.0,
-    "ai_proficiency": 1.0,
+    "documentation": 1.0,
+    "deliverable_completeness": 1.0,
 }
 
 
@@ -414,9 +414,19 @@ Evaluate using these criteria:
    - 3-4: Basic ERC-20/token transfers, simple reward distribution
    - 1-2: No tokenomics elements
 
-4. innovation - Novel approaches, creative problem solving
+4. documentation - Quality of documentation:
+   - 9-10: Comprehensive README (setup, usage, architecture), API docs, inline comments, contribution guide
+   - 7-8: Good README with setup instructions and usage examples, some code comments
+   - 5-6: Basic README with project description, minimal setup info
+   - 3-4: README exists but lacks useful information
+   - 1-2: No README or documentation
 
-5. ai_proficiency - Evidence of AI tool usage, modern development practices
+5. deliverable_completeness - Is there a tangible, working result?
+   - 9-10: Deployed/demo-ready application, comprehensive tests, CI/CD pipeline
+   - 7-8: Working application that can be run locally, has tests
+   - 5-6: Partially working code with some runnable components
+   - 3-4: Code exists but not easily runnable, no clear entry point
+   - 1-2: Incomplete code, no working deliverable
 
 **Track B Criteria (rate each as "strong", "adequate", or "weak"):**
 - problem_definition: Is the problem clearly defined? Does it address a real need?
@@ -428,9 +438,9 @@ Respond in JSON with these fields:
 - "ecosystem_relevance": How does it relate to Tokamak Network / Ethereum L2? (1-2 sentences)
 - "code_quality": Code quality assessment (1-2 sentences)
 - "tokenomics_impact": Tokenomics/protocol-level impact potential (1-2 sentences)
-- "innovation_notes": Innovation assessment (1-2 sentences)
-- "ai_usage_evidence": Evidence of AI tool usage (1-2 sentences)
-- "scores": object with integer 1-10 for: "technical_completeness", "ecosystem_fit", "tokenomics_impact", "innovation", "ai_proficiency"
+- "documentation_notes": Documentation quality assessment (1-2 sentences)
+- "deliverable_notes": Deliverable completeness assessment (1-2 sentences)
+- "scores": object with integer 1-10 for: "technical_completeness", "ecosystem_fit", "tokenomics_impact", "documentation", "deliverable_completeness"
 - "track_b": object with "problem_definition", "implementation", "deliverable" (each "strong"/"adequate"/"weak") and "track_b_summary" (1-2 sentences)
 - "recommendation": one of "Strong Hire", "Hire", "Maybe", "Pass"
 - "report": Full evaluation report (3-5 paragraphs)
@@ -483,15 +493,16 @@ def _fallback_scores(repo_analysis: dict) -> dict:
     tech = min(10, max(1, fc // 10 + cc // 5 + (2 if has_tests else 0)))
     eco = 5 if any(l in langs for l in ["Solidity", "Rust"]) else 3
     tok = 3
-    inn = min(8, max(2, len(langs)))
-    ai_p = 3
+    readme = repo_analysis.get("readme_full", "") or ""
+    doc = min(8, max(1, 3 + (2 if len(readme) > 500 else 0) + (2 if len(readme) > 2000 else 0)))
+    deliv = min(8, max(1, 2 + (2 if has_tests else 0) + min(4, fc // 15)))
 
     scores = {
         "technical_completeness": tech,
         "ecosystem_fit": eco,
         "tokenomics_impact": tok,
-        "innovation": inn,
-        "ai_proficiency": ai_p,
+        "documentation": doc,
+        "deliverable_completeness": deliv,
     }
 
     return {

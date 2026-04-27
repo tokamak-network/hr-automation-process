@@ -246,7 +246,20 @@ async def ai_analyze(repo_analysis: dict, description: str = "") -> dict:
     if not api_key:
         return _fallback_scores(repo_analysis)
 
-    prompt = """Analyze this code repository for a hiring evaluation at Tokamak Network (Ethereum L2/rollup project).
+    prompt = """Analyze this code repository for a hiring evaluation at Tokamak Network.
+
+**About Tokamak Network:**
+Tokamak Network builds customizable Layer 2 networks on Ethereum using the Thanos Stack (based on OP Stack v1.7.7, Optimistic Rollup).
+- Core components: op-geth (execution), op-node (consensus), op-batcher (data submission), op-proposer (state updates)
+- Cross-Layer Message Protocol for inter-L2 communication without base layer routing
+- EVM-equivalent execution, EIP-4844 blob data availability, 12-second block times
+- L1↔L2 Bridge: OptimismPortal, L1/L2StandardBridge, CrossChainMessenger
+- TON token: staking (min 1,000.1 TON for DAO), seigniorage (3.92 TON/block, ~10.3M TON/year)
+- Seigniorage model: T_Φ = S + T_L2, distributed to Stakers (Φ_S), Sequencers (Φ_L2), DAO (Φ_DAO)
+- Sequencer economics: collateral bond, challenge mechanism (DTD 7-14 days), Group Challenge, Fast Withdrawal
+- Key contracts: SeigManager, OptimismMintableERC20Factory, IOptimismMintableERC20
+- Dev tools: Thanos SDK (TypeScript), Hardhat/Foundry, Solidity
+
 This evaluation follows Tokamak's Track B philosophy: we value BUILDERS who solve real problems with working code.
 
 Repository Info:
@@ -265,10 +278,25 @@ Sample Code:
 Evaluate using these criteria:
 
 **5 Scoring Dimensions (1-10 each):**
+
 1. technical_completeness - Code quality, architecture, testing, documentation
-2. ecosystem_fit - Relevance to Tokamak/Ethereum L2/rollup ecosystem (WEIGHTED 2x)
-3. tokenomics_impact - Understanding of token economics, protocol design
+
+2. ecosystem_fit (WEIGHTED 2x) - Relevance to Tokamak/Ethereum L2 ecosystem:
+   - 9-10: Directly related to Thanos/OP Stack (L2 sequencer, op-geth, op-node, rollup verification, Cross-Layer Protocol)
+   - 7-8: EVM/Solidity smart contracts, L1↔L2 bridge, ERC-20 standards, blockchain infrastructure
+   - 5-6: General Ethereum development (DeFi, NFT, Web3), Hardhat/Foundry tooling
+   - 3-4: Blockchain but non-EVM chains (Solana, Cosmos, etc.)
+   - 1-2: Not blockchain related
+
+3. tokenomics_impact - Understanding of token economics and protocol design:
+   - 9-10: TON seigniorage model, verifier's dilemma, Group Challenge, Fast Withdrawal liquidity
+   - 7-8: Staking/unstaking mechanisms, DAO governance, L2 deposit/withdrawal economics
+   - 5-6: General tokenomics (staking, liquidity pools, governance tokens), DeFi protocol design
+   - 3-4: Basic ERC-20/token transfers, simple reward distribution
+   - 1-2: No tokenomics elements
+
 4. innovation - Novel approaches, creative problem solving
+
 5. ai_proficiency - Evidence of AI tool usage, modern development practices
 
 **Track B Criteria (rate each as "strong", "adequate", or "weak"):**

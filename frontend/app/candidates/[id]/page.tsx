@@ -86,7 +86,7 @@ export default function CandidateDetail() {
         {candidate.description && (
           <div className={`rounded-lg p-3 bg-white border border-gray-200 ${candidate.demo_url ? "" : "col-span-2"}`}>
             <div className="text-[10px] text-gray-400 mb-0.5">Description</div>
-            <div className="text-sm text-gray-700 line-clamp-3">{candidate.description}</div>
+            <div className="text-sm text-gray-700 whitespace-pre-wrap">{candidate.description}</div>
           </div>
         )}
       </div>

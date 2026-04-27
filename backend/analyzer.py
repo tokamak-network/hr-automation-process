@@ -102,15 +102,89 @@ async def recommend_reviewers(candidate_scores: Dict[str, Any], repo_analysis: D
     return recommendations[:3]
 
 
+# Domain keywords extracted from repo content (README, code, file names)
+DOMAIN_KEYWORDS = {
+    # L2 / Rollup
+    "rollup": ["rollup", "optimistic", "op-stack", "thanos", "l2", "layer2", "layer-2"],
+    "sequencer": ["sequencer", "op-batcher", "op-proposer", "op-node", "op-geth", "batch"],
+    "bridge": ["bridge", "cross-chain", "cross-layer", "deposit", "withdraw", "portal", "l1-l2"],
+    # Smart Contracts
+    "smart-contracts": ["smart-contract", "solidity", "evm", "opcode", "abi", "deploy"],
+    "staking": ["staking", "stake", "unstake", "seigniorage", "seig", "ton-staking", "validator"],
+    "dao": ["dao", "governance", "vote", "proposal", "agenda"],
+    # ZK
+    "zk": ["zk", "zero-knowledge", "zk-proof", "snark", "stark", "circom", "plonk", "groth16"],
+    # DeFi
+    "defi": ["defi", "swap", "liquidity", "pool", "amm", "uniswap", "lending", "yield"],
+    "token": ["erc20", "erc-20", "erc721", "erc-721", "token", "mint", "burn", "transfer"],
+    # Infra
+    "frontend": ["react", "next.js", "nextjs", "frontend", "ui", "ux", "webapp", "dashboard"],
+    "backend": ["api", "server", "fastapi", "express", "backend", "database"],
+    "devops": ["docker", "ci/cd", "deploy", "kubernetes", "terraform", "infra"],
+}
+
+# Map team repos to domain expertise
+REPO_DOMAIN_MAP = {
+    "tokamak-zk-evm": ["zk", "rollup", "smart-contracts"],
+    "tokamak-zk-evm-contracts": ["zk", "smart-contracts"],
+    "ton-staking-v2": ["staking", "smart-contracts", "token"],
+    "tokamak-thanos": ["rollup", "sequencer", "bridge"],
+    "tokamak-dao": ["dao", "smart-contracts"],
+    "tokamak-dao-v2": ["dao", "smart-contracts"],
+    "tokamak-dao-contracts": ["dao", "smart-contracts"],
+    "crosstrade": ["bridge", "defi", "smart-contracts"],
+    "tokamak-oracle-network": ["defi", "smart-contracts"],
+    "tokamak-bridge": ["bridge", "frontend"],
+    "tokamak-landing-page": ["frontend"],
+    "enshrined-vrf": ["zk", "smart-contracts"],
+    "commit-reveal-drb": ["zk", "smart-contracts"],
+    "ethrex": ["rollup", "sequencer"],
+    "secure-vote": ["zk", "dao"],
+    "tokamon": ["token", "defi"],
+}
+
+
+def _extract_domain_keywords(repo_analysis: Dict[str, Any]) -> Dict[str, float]:
+    """Extract domain keywords from candidate repo content with relevance scores."""
+    text = " ".join([
+        (repo_analysis.get("readme_full", "") or ""),
+        (repo_analysis.get("description", "") or ""),
+        " ".join(repo_analysis.get("languages", {}).keys()),
+        " ".join(repo_analysis.get("file_list", [])[:100]) if repo_analysis.get("file_list") else "",
+    ]).lower()
+
+    domain_scores: Dict[str, float] = {}
+    for domain, keywords in DOMAIN_KEYWORDS.items():
+        count = sum(text.count(kw) for kw in keywords)
+        if count > 0:
+            domain_scores[domain] = min(count * 0.3, 3.0)  # cap at 3.0
+
+    return domain_scores
+
+
+def _get_profile_domains(profile) -> Dict[str, float]:
+    """Get domain expertise from team profile's top repos."""
+    repos = json.loads(profile["top_repos"]) if profile["top_repos"] else []
+    domain_scores: Dict[str, float] = {}
+
+    for repo in repos:
+        repo_name = (repo.get("name", "") or "").lower().replace("_", "-")
+        for key, domains in REPO_DOMAIN_MAP.items():
+            if key in repo_name:
+                for d in domains:
+                    domain_scores[d] = domain_scores.get(d, 0) + 1.0
+
+    return domain_scores
+
+
 def _match_from_profiles(profiles, repo_analysis: Dict[str, Any], exclude_email: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Match candidate repo against team_profiles expertise_areas."""
-    # Build candidate expertise keywords from languages
-    candidate_keywords = set()  # type: Set[str]
+    """Match candidate repo against team_profiles using language + domain matching."""
+    # 1. Language-based keywords
+    candidate_lang_keywords = set()
     if repo_analysis:
         for lang in repo_analysis.get("languages", {}).keys():
             lang_lower = lang.lower()
-            candidate_keywords.add(lang_lower)
-            # Map languages to broader areas
+            candidate_lang_keywords.add(lang_lower)
             mapping = {
                 "solidity": ["solidity", "smart-contracts", "ethereum"],
                 "typescript": ["typescript", "fullstack", "frontend"],
@@ -122,7 +196,10 @@ def _match_from_profiles(profiles, repo_analysis: Dict[str, Any], exclude_email:
                 "html": ["frontend"],
             }
             for kw in mapping.get(lang_lower, []):
-                candidate_keywords.add(kw)
+                candidate_lang_keywords.add(kw)
+
+    # 2. Domain-based keywords from repo content
+    candidate_domains = _extract_domain_keywords(repo_analysis) if repo_analysis else {}
 
     recommendations = []
     for profile in profiles:
@@ -130,31 +207,51 @@ def _match_from_profiles(profiles, repo_analysis: Dict[str, Any], exclude_email:
         if not expertise:
             continue
 
-        # Weighted match score
-        match_score = 0.0
-        matching_skills = []
-        for keyword in candidate_keywords:
+        # Language match score
+        lang_score = 0.0
+        matching_langs = []
+        for keyword in candidate_lang_keywords:
             if keyword in expertise:
-                score = expertise[keyword]
-                match_score += score
-                matching_skills.append(keyword)
+                lang_score += expertise[keyword]
+                matching_langs.append(keyword)
 
-        if match_score > 0:
+        # Domain match score (from repo content vs team repo domains)
+        profile_domains = _get_profile_domains(profile)
+        domain_score = 0.0
+        matching_domains = []
+        for domain, candidate_weight in candidate_domains.items():
+            if domain in profile_domains:
+                domain_score += candidate_weight * profile_domains[domain]
+                matching_domains.append(domain)
+
+        total_score = lang_score + (domain_score * 1.5)  # domain weighted 1.5x
+
+        if total_score > 0:
+            all_matching = matching_langs + matching_domains
             recommendations.append({
                 "name": profile["display_name"] or profile["github_username"],
                 "email": "",
                 "github": profile["github_username"],
                 "avatar_url": profile["avatar_url"] or "",
-                "matching_skills": sorted(matching_skills, key=lambda s: expertise.get(s, 0), reverse=True)[:6],
-                "match_score": round(match_score, 2),
+                "matching_skills": sorted(set(all_matching), key=lambda s: expertise.get(s, 0) + candidate_domains.get(s, 0), reverse=True)[:6],
+                "match_score": round(total_score, 2),
                 "expertise": expertise,
-                "why": "Strong in: {}".format(", ".join(
-                    sorted(matching_skills, key=lambda s: expertise.get(s, 0), reverse=True)[:3]
-                )),
+                "domain_match": matching_domains,
+                "why": _build_why(matching_langs, matching_domains, expertise),
             })
 
     recommendations.sort(key=lambda x: x["match_score"], reverse=True)
     return recommendations[:3]
+
+
+def _build_why(matching_langs: list, matching_domains: list, expertise: dict) -> str:
+    parts = []
+    if matching_domains:
+        parts.append("Domain: " + ", ".join(matching_domains[:3]))
+    if matching_langs:
+        top_langs = sorted(matching_langs, key=lambda s: expertise.get(s, 0), reverse=True)[:3]
+        parts.append("Skills: " + ", ".join(top_langs))
+    return " | ".join(parts) if parts else "General match"
 
 
 async def analyze_repo(repo_url: str) -> dict:

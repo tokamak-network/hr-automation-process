@@ -150,6 +150,14 @@ async def list_candidates():
     return candidates
 
 
+@app.delete("/api/candidates/{candidate_id}")
+async def delete_candidate(candidate_id: int):
+    db = await get_db()
+    await db.execute("DELETE FROM candidates WHERE id=?", (candidate_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deleted"}
+
 @app.get("/api/candidates/{candidate_id}")
 async def get_candidate(candidate_id: int):
     db = await get_db()

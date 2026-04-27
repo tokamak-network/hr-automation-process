@@ -22,6 +22,12 @@ export default function CandidatesPage() {
     setCandidates(updated);
   };
 
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirm(`"${name}" 후보자를 삭제하시겠습니까?`)) return;
+    await fetch(`${API}/api/candidates/${id}`, { method: "DELETE" });
+    setCandidates(prev => prev.filter(c => c.id !== id));
+  };
+
   const avgScore = (scores: Record<string, number> | null) => {
     if (!scores) return "-";
     const vals = Object.values(scores);
@@ -53,7 +59,8 @@ export default function CandidatesPage() {
                   <td className={`py-3 px-4 font-medium ${recColor[c.recommendation || ""] || ""}`}>{c.recommendation || "-"}</td>
                   <td className="py-3 px-4">
                     {c.status === "submitted" && <button onClick={() => triggerAnalysis(c.id)} className="text-xs px-3 py-1 rounded font-medium text-white bg-[#1C1C1C] hover:bg-gray-800">Analyze</button>}
-                    {c.status === "analyzed" && <a href={`/candidates/${c.id}`} className="text-[#2A72E5] text-xs hover:underline">View</a>}
+                    {c.status === "analyzed" && <a href={`/candidates/${c.id}`} className="text-[#2A72E5] text-xs hover:underline mr-2">View</a>}
+                    <button onClick={() => handleDelete(c.id, c.name)} className="text-xs text-red-500 hover:underline">삭제</button>
                   </td>
                 </tr>
               ))}

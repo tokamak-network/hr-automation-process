@@ -54,7 +54,7 @@ export default function CandidateDetail() {
     technical_completeness: "Technical Completeness",
     ecosystem_fit: "Ecosystem Fit (2x)",
     tokenomics_impact: "Tokenomics Impact",
-    documentation: "Documentation",
+    contribution_potential: "Contribution Potential",
     deliverable_completeness: "Deliverable Completeness",
   };
 
@@ -70,6 +70,9 @@ export default function CandidateDetail() {
       <h1 className="text-2xl font-bold mt-2 mb-1 text-gray-900">{candidate.name}</h1>
       <p className="text-sm text-gray-500 mb-2">
         {candidate.email} · <a href={candidate.repo_url} className="text-[#2A72E5] hover:underline" target="_blank">{candidate.repo_url}</a>
+        {candidate.demo_url && (
+          <> · <a href={candidate.demo_url} className="text-emerald-600 hover:underline" target="_blank">Demo</a></>
+        )}
       </p>
       {candidate.analyzed_by && <p className="text-xs text-gray-400 mb-1">Analyzed by: {candidate.analyzed_by}</p>}
       {candidate.reviewed_by && <p className="text-xs text-gray-400 mb-1">Reviewed by: {candidate.reviewed_by}</p>}

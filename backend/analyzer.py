@@ -30,7 +30,7 @@ SCORE_WEIGHTS = {
     "technical_completeness": 1.0,
     "ecosystem_fit": 2.0,  # 2x weight
     "tokenomics_impact": 1.0,
-    "documentation": 1.0,
+    "contribution_potential": 1.0,
     "deliverable_completeness": 1.0,
 }
 
@@ -353,7 +353,7 @@ async def analyze_repo(repo_url: str) -> dict:
         }
 
 
-async def ai_analyze(repo_analysis: dict, description: str = "") -> dict:
+async def ai_analyze(repo_analysis: dict, description: str = "", demo_url: str = "") -> dict:
     """Call AI to generate qualitative analysis and scores with Track B criteria."""
     api_url = os.getenv("TOKAMAK_API_URL", os.getenv("AI_API_URL", "https://api.openai.com/v1/chat/completions"))
     api_key = os.getenv("TOKAMAK_API_KEY", os.getenv("AI_API_KEY", ""))
@@ -383,6 +383,7 @@ This evaluation follows Tokamak's Track B philosophy: we value BUILDERS who solv
 
 Repository Info:
 - Description: {description}
+- Demo URL: {demo_url}
 - Files: {files}, Size: {size}KB
 - Languages: {langs}
 - Commits: {commits}
@@ -414,12 +415,12 @@ Evaluate using these criteria:
    - 3-4: Basic ERC-20/token transfers, simple reward distribution
    - 1-2: No tokenomics elements
 
-4. documentation - Quality of documentation:
-   - 9-10: Comprehensive README (setup, usage, architecture), API docs, inline comments, contribution guide
-   - 7-8: Good README with setup instructions and usage examples, some code comments
-   - 5-6: Basic README with project description, minimal setup info
-   - 3-4: README exists but lacks useful information
-   - 1-2: No README or documentation
+4. contribution_potential - How likely this work can contribute to Tokamak Network:
+   - 9-10: Directly extends or complements existing Tokamak repos (new tooling for Thanos, L2 monitoring, bridge UI)
+   - 7-8: Addresses a gap in the current ecosystem (new UX approach, unexplored use case, novel developer tool)
+   - 5-6: Related technology that could be adapted for Tokamak with some effort
+   - 3-4: Generic blockchain work with loose connection to Tokamak
+   - 1-2: No clear contribution path to Tokamak ecosystem
 
 5. deliverable_completeness - Is there a tangible, working result?
    - 9-10: Deployed/demo-ready application, comprehensive tests, CI/CD pipeline
@@ -438,15 +439,16 @@ Respond in JSON with these fields:
 - "ecosystem_relevance": How does it relate to Tokamak Network / Ethereum L2? (1-2 sentences)
 - "code_quality": Code quality assessment (1-2 sentences)
 - "tokenomics_impact": Tokenomics/protocol-level impact potential (1-2 sentences)
-- "documentation_notes": Documentation quality assessment (1-2 sentences)
+- "contribution_potential_notes": How this work could contribute to Tokamak (1-2 sentences)
 - "deliverable_notes": Deliverable completeness assessment (1-2 sentences)
-- "scores": object with integer 1-10 for: "technical_completeness", "ecosystem_fit", "tokenomics_impact", "documentation", "deliverable_completeness"
+- "scores": object with integer 1-10 for: "technical_completeness", "ecosystem_fit", "tokenomics_impact", "contribution_potential", "deliverable_completeness"
 - "track_b": object with "problem_definition", "implementation", "deliverable" (each "strong"/"adequate"/"weak") and "track_b_summary" (1-2 sentences)
 - "recommendation": one of "Strong Hire", "Hire", "Maybe", "Pass"
 - "report": Full evaluation report (3-5 paragraphs)
 
 Return ONLY valid JSON.""".format(
         description=description,
+        demo_url=demo_url or "N/A",
         files=repo_analysis.get('file_count', 0),
         size=repo_analysis.get('total_size_kb', 0),
         langs=json.dumps(repo_analysis.get('languages', {})),
@@ -493,15 +495,14 @@ def _fallback_scores(repo_analysis: dict) -> dict:
     tech = min(10, max(1, fc // 10 + cc // 5 + (2 if has_tests else 0)))
     eco = 5 if any(l in langs for l in ["Solidity", "Rust"]) else 3
     tok = 3
-    readme = repo_analysis.get("readme_full", "") or ""
-    doc = min(8, max(1, 3 + (2 if len(readme) > 500 else 0) + (2 if len(readme) > 2000 else 0)))
+    contrib = eco  # fallback: same as ecosystem fit
     deliv = min(8, max(1, 2 + (2 if has_tests else 0) + min(4, fc // 15)))
 
     scores = {
         "technical_completeness": tech,
         "ecosystem_fit": eco,
         "tokenomics_impact": tok,
-        "documentation": doc,
+        "contribution_potential": contrib,
         "deliverable_completeness": deliv,
     }
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 const API = "http://localhost:8001";
 
 export default function SubmitPage() {
-  const [form, setForm] = useState({ name: "", email: "", repo_url: "", description: "" });
+  const [form, setForm] = useState({ name: "", email: "", repo_url: "", demo_url: "", description: "" });
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -16,7 +16,7 @@ export default function SubmitPage() {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
       });
       setResult(await res.json());
-      setForm({ name: "", email: "", repo_url: "", description: "" });
+      setForm({ name: "", email: "", repo_url: "", demo_url: "", description: "" });
     } catch { setResult({ error: "Failed to submit" }); }
     setLoading(false);
   };
@@ -25,7 +25,7 @@ export default function SubmitPage() {
     <div className="max-w-lg">
       <h1 className="text-2xl font-bold mb-6 text-gray-900">Submit Candidate</h1>
       <form onSubmit={submit} className="space-y-4">
-        {(["name", "email", "repo_url", "description"] as const).map(field => (
+        {(["name", "email", "repo_url", "demo_url", "description"] as const).map(field => (
           <div key={field}>
             <label className="block text-sm mb-1 capitalize text-gray-500">{field.replace("_", " ")}</label>
             {field === "description" ? (
@@ -34,7 +34,8 @@ export default function SubmitPage() {
             ) : (
               <input value={form[field]} onChange={e => setForm({ ...form, [field]: e.target.value })}
                 className="w-full rounded px-3 py-2 text-sm outline-none border border-gray-200 bg-white text-gray-900 focus:border-[#2A72E5] focus:ring-1 focus:ring-[#2A72E5]"
-                required type={field === "email" ? "email" : "text"} />
+                required={field !== "demo_url"} type={field === "email" ? "email" : "text"}
+                placeholder={field === "demo_url" ? "https://... (optional)" : ""} />
             )}
           </div>
         ))}

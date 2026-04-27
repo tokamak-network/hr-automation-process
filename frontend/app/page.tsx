@@ -58,9 +58,11 @@ export default function CandidatesPage() {
                   <td className="py-3 px-4">{avgScore(c.scores)}</td>
                   <td className={`py-3 px-4 font-medium ${recColor[c.recommendation || ""] || ""}`}>{c.recommendation || "-"}</td>
                   <td className="py-3 px-4">
-                    {c.status === "submitted" && <button onClick={() => triggerAnalysis(c.id)} className="text-xs px-3 py-1 rounded font-medium text-white bg-[#1C1C1C] hover:bg-gray-800">Analyze</button>}
-                    {c.status === "analyzed" && <a href={`/candidates/${c.id}`} className="text-[#2A72E5] text-xs hover:underline mr-2">View</a>}
-                    <button onClick={() => handleDelete(c.id, c.name)} className="text-xs text-red-500 hover:underline">삭제</button>
+                    <div className="flex gap-2 items-center">
+                      {c.status === "submitted" && <button onClick={() => triggerAnalysis(c.id)} className="text-xs px-3 py-1 rounded font-medium text-white bg-[#1C1C1C] hover:bg-gray-800">Analyze</button>}
+                      {c.status === "analyzed" && <a href={`/candidates/${c.id}`} className="text-[#2A72E5] text-xs hover:underline">View</a>}
+                      <button onClick={() => handleDelete(c.id, c.name)} className="text-xs text-red-500 hover:underline">삭제</button>
+                    </div>
                   </td>
                 </tr>
               ))}

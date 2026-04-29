@@ -67,7 +67,17 @@ export default function CandidateDetail() {
   return (
     <div>
       <a href="/" className="text-sm text-gray-400 hover:text-gray-700 transition">← Back</a>
-      <h1 className="text-2xl font-bold mt-2 mb-4 text-gray-900">{candidate.name}</h1>
+      <div className="flex items-center gap-3 mt-2 mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">{candidate.name}</h1>
+        {candidate.status === "analyzed" && (
+          <div className="flex gap-1">
+            <a href={`${API}/api/candidates/${id}/report/download?format=md`}
+              className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50">.md</a>
+            <a href={`${API}/api/candidates/${id}/report/download?format=pdf`}
+              className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50">PDF</a>
+          </div>
+        )}
+      </div>
       <div className="max-w-2xl mb-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg p-3 bg-white border border-gray-200">

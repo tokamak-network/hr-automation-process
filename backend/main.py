@@ -195,6 +195,163 @@ async def get_report(candidate_id: int):
     return c
 
 
+@app.get("/api/candidates/{candidate_id}/report/download")
+async def download_report(candidate_id: int, format: str = "md"):
+    """Download candidate analysis report as MD or PDF."""
+    db = await get_db()
+    row = await db.execute("SELECT * FROM candidates WHERE id = ?", (candidate_id,))
+    candidate = await row.fetchone()
+    await db.close()
+    if not candidate:
+        raise HTTPException(404, "Candidate not found")
+
+    c = dict(candidate)
+    scores = json.loads(c["scores"]) if c.get("scores") else {}
+    track_b = json.loads(c["track_b_evaluation"]) if c.get("track_b_evaluation") else {}
+
+    score_labels = {
+        "technical_completeness": "Technical Completeness",
+        "ecosystem_fit": "Ecosystem Fit (2x)",
+        "tokenomics_impact": "Tokenomics Impact",
+        "contribution_potential": "Contribution Potential",
+        "deliverable_completeness": "Deliverable Completeness",
+    }
+
+    md = f"""# Candidate Evaluation Report
+## {c['name']}
+
+| Field | Value |
+|-------|-------|
+| Email | {c.get('email', '')} |
+| Repository | {c.get('repo_url', '')} |
+| Demo | {c.get('demo_url', '') or 'N/A'} |
+| Status | {c.get('status', '')} |
+| Recommendation | **{c.get('recommendation', '-')}** |
+| Weighted Score | **{c.get('weighted_score', '-')} / 10** |
+| Analyzed At | {c.get('analyzed_at', '')} |
+| Analyzed By | {c.get('analyzed_by', '') or '-'} |
+
+---
+
+## Scores
+
+| Dimension | Score |
+|-----------|-------|
+"""
+    for key, label in score_labels.items():
+        md += f"| {label} | {scores.get(key, '-')} / 10 |\n"
+
+    md += f"""
+---
+
+## Track B Evaluation
+
+| Criteria | Rating |
+|----------|--------|
+| Problem Definition | {track_b.get('problem_definition', '-')} |
+| Implementation | {track_b.get('implementation', '-')} |
+| Deliverable | {track_b.get('deliverable', '-')} |
+
+{track_b.get('track_b_summary', '')}
+
+---
+
+## Description
+
+{c.get('description', '') or 'N/A'}
+
+---
+
+## Full Report
+
+{c.get('report', '') or 'No report available.'}
+"""
+
+    if format == "pdf":
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib import colors
+        from reportlab.lib.units import mm
+        import io
+
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=20*mm, bottomMargin=20*mm, leftMargin=20*mm, rightMargin=20*mm)
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('Title2', parent=styles['Title'], fontSize=18, spaceAfter=12)
+        h2_style = ParagraphStyle('H2', parent=styles['Heading2'], fontSize=14, spaceAfter=8, spaceBefore=16)
+        body_style = ParagraphStyle('Body2', parent=styles['Normal'], fontSize=10, spaceAfter=6, leading=14)
+
+        story = []
+        story.append(Paragraph(f"Candidate Evaluation Report: {c['name']}", title_style))
+        story.append(Spacer(1, 6))
+
+        info_data = [
+            ["Email", c.get('email', '')],
+            ["Repository", c.get('repo_url', '')],
+            ["Demo", c.get('demo_url', '') or 'N/A'],
+            ["Recommendation", c.get('recommendation', '-')],
+            ["Weighted Score", f"{c.get('weighted_score', '-')} / 10"],
+        ]
+        t = Table(info_data, colWidths=[120, 350])
+        t.setStyle(TableStyle([
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(t)
+
+        story.append(Paragraph("Scores", h2_style))
+        score_data = [["Dimension", "Score"]]
+        for key, label in score_labels.items():
+            score_data.append([label, f"{scores.get(key, '-')} / 10"])
+        t2 = Table(score_data, colWidths=[250, 100])
+        t2.setStyle(TableStyle([
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.16, 0.45, 0.9)),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(t2)
+
+        story.append(Paragraph("Track B Evaluation", h2_style))
+        tb_data = [["Criteria", "Rating"]]
+        for k in ["problem_definition", "implementation", "deliverable"]:
+            tb_data.append([k.replace("_", " ").title(), track_b.get(k, '-')])
+        t3 = Table(tb_data, colWidths=[250, 100])
+        t3.setStyle(TableStyle([
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.Color(0.16, 0.45, 0.9)),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(t3)
+
+        if c.get('report'):
+            story.append(Paragraph("Full Report", h2_style))
+            for para in (c['report'] or '').split('\n'):
+                if para.strip():
+                    story.append(Paragraph(para, body_style))
+
+        doc.build(story)
+        buf.seek(0)
+        from fastapi.responses import Response
+        return Response(content=buf.read(), media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="report_{c["name"]}_{candidate_id}.pdf"'})
+
+    else:
+        from fastapi.responses import Response
+        return Response(content=md, media_type="text/markdown",
+            headers={"Content-Disposition": f'attachment; filename="report_{c["name"]}_{candidate_id}.md"'})
+
+
 @app.get("/api/candidates/{candidate_id}/recommended-reviewers")
 async def get_recommended_reviewers(candidate_id: int, request: Request):
     user_email = get_user_email(request)

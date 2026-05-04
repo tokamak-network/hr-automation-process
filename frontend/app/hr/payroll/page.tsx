@@ -175,6 +175,29 @@ export default function Payroll() {
                 </button>
               ))}
             </div>
+            {payrolls.length > 0 && (
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-xs text-gray-400">일괄:</span>
+                {(["estimated", "confirmed", "paid"] as const).map(s => {
+                  const label = s === "estimated" ? "예상" : s === "confirmed" ? "확정" : "지급완료";
+                  const color = s === "paid" ? "bg-emerald-500 hover:bg-emerald-600" : s === "confirmed" ? "bg-blue-500 hover:bg-blue-600" : "bg-amber-500 hover:bg-amber-600";
+                  return (
+                    <button key={s} onClick={async () => {
+                      if (!confirm(`${year}년 ${month}월 전체를 "${label}"(으)로 변경하시겠습니까?`)) return;
+                      const res = await fetch("/api/hr/payroll/bulk-status", {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ year, month, status: s }),
+                      });
+                      const data = await res.json();
+                      alert(data.message);
+                      await loadPayrolls();
+                    }} className={`text-xs px-2.5 py-1 rounded text-white ${color}`}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="rounded-xl overflow-hidden bg-white border border-gray-200">
             <table className="w-full text-sm">

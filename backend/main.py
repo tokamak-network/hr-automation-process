@@ -1439,6 +1439,31 @@ async def pay_payroll(data: PayrollConfirm):
     await db.close()
     return {"message": "Marked as paid"}
 
+class PayrollBulkStatus(BaseModel):
+    year: int
+    month: int
+    status: str  # estimated, confirmed, paid
+
+@app.post("/api/hr/payroll/bulk-status")
+async def bulk_update_payroll_status(data: PayrollBulkStatus):
+    """일괄 상태 변경 (해당 연/월 전체)"""
+    db = await get_db()
+    if data.status == "confirmed":
+        await db.execute("UPDATE payrolls SET status='confirmed', confirmed_at=datetime('now') WHERE year=? AND month=?", (data.year, data.month))
+    elif data.status == "paid":
+        await db.execute("UPDATE payrolls SET status='paid', paid_at=datetime('now') WHERE year=? AND month=?", (data.year, data.month))
+    elif data.status == "estimated":
+        await db.execute("UPDATE payrolls SET status='estimated', confirmed_at=NULL, paid_at=NULL WHERE year=? AND month=?", (data.year, data.month))
+    else:
+        await db.close()
+        raise HTTPException(400, "Invalid status")
+    count = db.total_changes if hasattr(db, 'total_changes') else 0
+    await db.commit()
+    row = await db.execute("SELECT COUNT(*) as cnt FROM payrolls WHERE year=? AND month=?", (data.year, data.month))
+    cnt = (await row.fetchone())["cnt"]
+    await db.close()
+    return {"message": f"{cnt}건 → {data.status}", "count": cnt}
+
 
 # ── Dashboard ──
 

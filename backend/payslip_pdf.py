@@ -293,9 +293,9 @@ def generate_payslip_pdf(
         lbl_lines = _wrap_text(c, lbl, _FONT_B, 8.5, il - 12)
         _draw_cell(c, ix, ry, il, rh, lbl_lines, _FONT_B, 8.5, DARK, align="center", bold=True)
 
-        # Value — wrap long strings (ERC20, URL), left-aligned
+        # Value — wrap long strings (ERC20, TX), smaller font for addresses
         max_val_w = iv - 14
-        val_sz = 8.5
+        val_sz = 7 if lbl in ("ERC20 Address", "Transaction") else 8.5
         if val and c.stringWidth(val, _FONT, val_sz) > max_val_w:
             val_lines = _wrap_text(c, val, _FONT, val_sz, max_val_w)
         else:

@@ -294,13 +294,35 @@ def generate_payslip_pdf(
             val_lines = _wrap_text(c, val, _FONT, val_sz, max_val_w) if val else [""]
         _draw_cell(c, ix + il, ry, iv, rh, val_lines, _FONT, val_sz, DARK, align="left", bold=True)
 
-    # === SERVICE FEE COLUMN (no empty rows) ===
+    # === SERVICE FEE & EXPENSES COLUMN ===
+    total_payout = service_fee_usdt + expense_total_usdt
+
     fee_items = [
         (0, 1, "Basic service fee\nfor each period", _fmt_int(service_fee_usdt), False),
-        (1, 1, "Allowance paid for\nservice fee period", "-", False),
-        (2, 2, "Any other additional\npayment for each period", "-", False),
-        (4, 1, "\u24b6 Total", _fmt_int(service_fee_usdt), True),
     ]
+
+    # Add expense items dynamically
+    exp_list = expenses or []
+    if exp_list:
+        row_idx = 1
+        for exp in exp_list[:4]:  # max 4 expense items in the box
+            cat = exp.get("category", "")
+            desc = exp.get("description", "") or exp.get("memo", "")
+            label = f"{cat}: {desc}" if desc else cat
+            amt = exp.get("amount_usdt", 0)
+            fee_items.append((row_idx, 1, label, _fmt_int(amt), False))
+            row_idx += 1
+        # Expense subtotal if multiple
+        if len(exp_list) > 1:
+            fee_items.append((row_idx, 1, "Expense Subtotal\n(Non-taxable)", _fmt_int(expense_total_usdt), False))
+            row_idx += 1
+    else:
+        row_idx = 1
+        fee_items.append((1, 1, "Expenses\n(Non-taxable)", "-", False))
+        row_idx = 2
+
+    # Total row
+    fee_items.append((row_idx, 1, "\u24b6 Total", _fmt_int(total_payout), True))
 
     for start, span, lbl, val, is_tot in fee_items:
         ry = r0 - (start + span) * rh
@@ -330,12 +352,13 @@ def generate_payslip_pdf(
         _draw_cell(c, tx, ry, tl, h, [lbl], _FONT_B, 9, tc, fill=bg, align="center", bold=True)
         _draw_cell(c, tx + tl, ry, tv, h, [val], _FONT_B, 10, DARK, align="right", bold=True)
 
-    # === NET SERVICE FEE (right after Tax Total) ===
-    net_ry = r0 - 4 * rh  # row 3 (after Tax Total at row 2)
+    # === NET PAYOUT (right after Tax Total) ===
+    net_ry = r0 - 4 * rh
     net_h = rh
+    net_payout = total_payout - tt_usdt
 
-    _draw_cell(c, tx, net_ry, tl, net_h, ["Net service fee", "(\u24b6-\u24b7)"], _FONT_B, 9, DARK, fill=LIGHT_BLUE, align="center", bold=True)
-    _draw_cell(c, tx + tl, net_ry, tv, net_h, [_fmt_int(net_usdt)], _FONT_B, 12, DARK, fill=LIGHT_BLUE, align="right", bold=True)
+    _draw_cell(c, tx, net_ry, tl, net_h, ["Net payout", "(\u24b6-\u24b7)"], _FONT_B, 9, DARK, fill=LIGHT_BLUE, align="center", bold=True)
+    _draw_cell(c, tx + tl, net_ry, tv, net_h, [_fmt_int(net_payout)], _FONT_B, 12, DARK, fill=LIGHT_BLUE, align="right", bold=True)
 
     # ── KRW Reference ── (positioned below Info column which is always 7 rows)
     info_bottom = r0 - 7 * rh
@@ -361,32 +384,8 @@ def generate_payslip_pdf(
         _draw_cell(c, mx + ref_cw * 2, ry, ref_cw, ref_rh, [l2], _FONT_B, 8, GRAY, align="left", bold=True)
         _draw_cell(c, mx + ref_cw * 3, ry, ref_cw, ref_rh, [v2], _FONT_B, 8.5, DARK, align="right", bold=True)
 
-    # ── Expenses Section (비과세) ──
-    if expenses and len(expenses) > 0:
-        exp_y = ref_y - ref_rh - 4 * ref_rh - 10
-        _text(c, mx, exp_y, "Expenses (Non-taxable / 비과세 경비)", _FONT_B, 9, BLUE)
-        exp_y -= 16
-        for exp in expenses[:8]:  # max 8 items
-            cat = exp.get("category", "")
-            desc = exp.get("description", "") or exp.get("memo", "")
-            amt = exp.get("amount_usdt", 0)
-            line = f"  {cat}: {desc}" if desc else f"  {cat}"
-            _text(c, mx, exp_y, line, _FONT, 7.5, DARK)
-            _text(c, mx + 350, exp_y, f"{amt:,.2f} USDT", _FONT_B, 7.5, DARK)
-            exp_y -= 12
-
-        exp_y -= 4
-        _text(c, mx, exp_y, "Expense Subtotal:", _FONT_B, 8, DARK)
-        _text(c, mx + 350, exp_y, f"{expense_total_usdt:,.2f} USDT", _FONT_B, 8, BLUE)
-        exp_y -= 14
-        total_payout = service_fee_usdt + expense_total_usdt
-        _text(c, mx, exp_y, "Total Payout (Service Fee + Expenses):", _FONT_B, 9, DARK)
-        _text(c, mx + 350, exp_y, f"{total_payout:,.2f} USDT", _FONT_B, 9, BLUE)
-        fy = exp_y - 20
-    else:
-        fy = ref_y - ref_rh - 4 * ref_rh - 10
-
     # ── Footer ──
+    fy = ref_y - ref_rh - 4 * ref_rh - 10
     _text(c, mx, fy, "Notice: This payslip is generated based on the 2026 Korean Simplified Tax Table (\uadfc\ub85c\uc18c\ub4dd \uac04\uc774\uc138\uc561\ud45c, revised 2026.2.27).", _FONT, 7, GRAY)
     _text(c, mx, fy - 11, "Actual tax amounts may differ from the simplified table calculations. Tax amounts are converted to USDT using the applied exchange rate.", _FONT, 7, GRAY)
 

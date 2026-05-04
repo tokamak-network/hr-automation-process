@@ -304,13 +304,13 @@ def generate_payslip_pdf(
     ]
 
     if exp_list:
+        fee_rows.append({"lbl": "Expense Subtotal\n(Non-taxable)", "val": _fmt_int(expense_total_usdt), "type": "subtotal"})
         for exp in exp_list[:5]:
             cat = exp.get("category", "")
             desc = exp.get("description", "") or exp.get("memo", "")
             label = f"  · {cat}: {desc}" if desc else f"  · {cat}"
             amt = exp.get("amount_usdt", 0)
             fee_rows.append({"lbl": label, "val": _fmt_int(amt), "type": "expense_item"})
-        fee_rows.append({"lbl": "Expense Subtotal\n(Non-taxable)", "val": _fmt_int(expense_total_usdt), "type": "subtotal"})
     else:
         fee_rows.append({"lbl": "Expenses\n(Non-taxable)", "val": "-", "type": "normal"})
 

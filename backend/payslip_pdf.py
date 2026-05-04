@@ -267,48 +267,52 @@ def generate_payslip_pdf(
     tl = tax_w * 0.55
     tv = tax_w * 0.45
 
-    # Parse multiple TX hashes (newline or comma separated), extract hash from URL
-    tx_list = []
+    # Parse multiple TX hashes (newline or comma separated)
+    tx_list = []  # [(display_hash, full_url)]
     if transaction_url:
         for line in transaction_url.replace(",", "\n").split("\n"):
             line = line.strip()
             if not line:
                 continue
-            # Extract hash from etherscan URL if needed
             if "/tx/" in line:
-                line = line.split("/tx/")[-1].strip()
-            tx_list.append(line)
-    tx_display = "\n".join(tx_list) if tx_list else ""
+                tx_hash = line.split("/tx/")[-1].strip()
+                tx_url = line
+            else:
+                tx_hash = line
+                tx_url = f"https://etherscan.io/tx/{line}"
+            tx_list.append((tx_hash, tx_url))
 
     # === INFO COLUMN (dynamic rows) ===
     addr_list = erc20_addresses or ([erc20_address] if erc20_address else [])
 
+    # info_data: (label, value, link_url)
     info_data = [
-        ("Company Name", "TOKAMAK NETWORK PTE. LTD."),
-        ("Full name of Contractor", contractor_name),
-        ("Date of payment", pay_date.strftime("%b %d, %Y")),
-        ("Start and end date of service fee period", f"{p_start.strftime('%B %d, %Y')} to {p_end.strftime('%B %d, %Y')}"),
+        ("Company Name", "TOKAMAK NETWORK PTE. LTD.", ""),
+        ("Full name of Contractor", contractor_name, ""),
+        ("Date of payment", pay_date.strftime("%b %d, %Y"), ""),
+        ("Start and end date of service fee period", f"{p_start.strftime('%B %d, %Y')} to {p_end.strftime('%B %d, %Y')}", ""),
     ]
-    # Add each address as separate row
     for idx, addr in enumerate(addr_list):
         label = f"ERC20 Address {idx + 1}" if len(addr_list) > 1 else "ERC20 Address"
-        info_data.append((label, addr))
+        info_data.append((label, addr, ""))
 
-    # Add each TX as separate row
+    # Add each TX as separate row (store as tuple with link info)
     if len(tx_list) > 1:
-        for idx, txh in enumerate(tx_list):
-            label = f"Transaction {idx + 1}" if len(tx_list) > 1 else "Transaction"
-            info_data.append((label, txh))
+        for idx, (txh, txurl) in enumerate(tx_list):
+            info_data.append((f"Transaction {idx + 1}", txh, txurl))
+    elif tx_list:
+        info_data.append(("Transaction", tx_list[0][0], tx_list[0][1]))
+        info_data.append(("Notice", "", ""))
     else:
-        info_data.append(("Transaction", tx_list[0] if tx_list else ""))
-        info_data.append(("Notice", ""))
+        info_data.append(("Transaction", "", ""))
+        info_data.append(("Notice", "", ""))
 
     cur_y = r0
-    for i, (lbl, val) in enumerate(info_data):
-        is_addr = lbl in ("ERC20 Address", "Transaction")
+    for i, row_data in enumerate(info_data):
+        lbl, val, link = row_data[0], row_data[1], row_data[2] if len(row_data) > 2 else ""
+        is_addr = "Address" in lbl or "Transaction" in lbl
         val_sz = 6.5 if is_addr else 8.5
 
-        # Calculate needed height based on wrapped lines
         max_val_w = iv - 14
         val_lines = _wrap_text(c, val, _FONT, val_sz, max_val_w) if val else [""]
         lbl_lines = _wrap_text(c, lbl, _FONT_B, 8.5, il - 12)
@@ -317,7 +321,16 @@ def generate_payslip_pdf(
 
         ry = cur_y - row_h
         _draw_cell(c, ix, ry, il, row_h, lbl_lines, _FONT_B, 8.5, DARK, align="center", bold=True)
-        _draw_cell(c, ix + il, ry, iv, row_h, val_lines, _FONT, val_sz, DARK, align="left", bold=True)
+
+        # Use blue color for clickable TX hashes
+        val_color = BLUE if link else DARK
+        _draw_cell(c, ix + il, ry, iv, row_h, val_lines, _FONT, val_sz, val_color, align="left", bold=True)
+
+        # Add clickable link annotation
+        if link:
+            from reportlab.lib.units import mm
+            c.linkURL(link, (ix + il, ry, ix + il + iv, ry + row_h), relative=0)
+
         cur_y = ry
 
     # === SERVICE FEE & EXPENSES COLUMN ===

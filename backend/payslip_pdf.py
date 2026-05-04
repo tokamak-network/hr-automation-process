@@ -185,6 +185,8 @@ def generate_payslip_pdf(
     total_tax_krw: int,
     tax_percentage: int = 100,
     issue_date: str = "",
+    expenses: list = None,
+    expense_total_usdt: float = 0,
 ) -> bytes:
     _init_fonts()
 
@@ -359,8 +361,32 @@ def generate_payslip_pdf(
         _draw_cell(c, mx + ref_cw * 2, ry, ref_cw, ref_rh, [l2], _FONT_B, 8, GRAY, align="left", bold=True)
         _draw_cell(c, mx + ref_cw * 3, ry, ref_cw, ref_rh, [v2], _FONT_B, 8.5, DARK, align="right", bold=True)
 
+    # ── Expenses Section (비과세) ──
+    if expenses and len(expenses) > 0:
+        exp_y = ref_y - ref_rh - 4 * ref_rh - 10
+        _text(c, mx, exp_y, "Expenses (Non-taxable / 비과세 경비)", _FONT_B, 9, BLUE)
+        exp_y -= 16
+        for exp in expenses[:8]:  # max 8 items
+            cat = exp.get("category", "")
+            desc = exp.get("description", "") or exp.get("memo", "")
+            amt = exp.get("amount_usdt", 0)
+            line = f"  {cat}: {desc}" if desc else f"  {cat}"
+            _text(c, mx, exp_y, line, _FONT, 7.5, DARK)
+            _text(c, mx + 350, exp_y, f"{amt:,.2f} USDT", _FONT_B, 7.5, DARK)
+            exp_y -= 12
+
+        exp_y -= 4
+        _text(c, mx, exp_y, "Expense Subtotal:", _FONT_B, 8, DARK)
+        _text(c, mx + 350, exp_y, f"{expense_total_usdt:,.2f} USDT", _FONT_B, 8, BLUE)
+        exp_y -= 14
+        total_payout = service_fee_usdt + expense_total_usdt
+        _text(c, mx, exp_y, "Total Payout (Service Fee + Expenses):", _FONT_B, 9, DARK)
+        _text(c, mx + 350, exp_y, f"{total_payout:,.2f} USDT", _FONT_B, 9, BLUE)
+        fy = exp_y - 20
+    else:
+        fy = ref_y - ref_rh - 4 * ref_rh - 10
+
     # ── Footer ──
-    fy = ref_y - ref_rh - 4 * ref_rh - 10
     _text(c, mx, fy, "Notice: This payslip is generated based on the 2026 Korean Simplified Tax Table (\uadfc\ub85c\uc18c\ub4dd \uac04\uc774\uc138\uc561\ud45c, revised 2026.2.27).", _FONT, 7, GRAY)
     _text(c, mx, fy - 11, "Actual tax amounts may differ from the simplified table calculations. Tax amounts are converted to USDT using the applied exchange rate.", _FONT, 7, GRAY)
 

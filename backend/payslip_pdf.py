@@ -267,13 +267,17 @@ def generate_payslip_pdf(
     tl = tax_w * 0.55
     tv = tax_w * 0.45
 
-    # Parse multiple TX hashes (newline or comma separated)
+    # Parse multiple TX hashes (newline or comma separated), extract hash from URL
     tx_list = []
     if transaction_url:
         for line in transaction_url.replace(",", "\n").split("\n"):
             line = line.strip()
-            if line:
-                tx_list.append(line)
+            if not line:
+                continue
+            # Extract hash from etherscan URL if needed
+            if "/tx/" in line:
+                line = line.split("/tx/")[-1].strip()
+            tx_list.append(line)
     tx_display = "\n".join(tx_list) if tx_list else ""
 
     # === INFO COLUMN (dynamic rows) ===
@@ -292,9 +296,9 @@ def generate_payslip_pdf(
 
     # Add each TX as separate row
     if len(tx_list) > 1:
-        for idx, tx in enumerate(tx_list):
+        for idx, txh in enumerate(tx_list):
             label = f"Transaction {idx + 1}" if len(tx_list) > 1 else "Transaction"
-            info_data.append((label, tx))
+            info_data.append((label, txh))
     else:
         info_data.append(("Transaction", tx_list[0] if tx_list else ""))
         info_data.append(("Notice", ""))

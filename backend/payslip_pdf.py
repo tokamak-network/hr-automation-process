@@ -290,8 +290,14 @@ def generate_payslip_pdf(
         label = f"ERC20 Address {idx + 1}" if len(addr_list) > 1 else "ERC20 Address"
         info_data.append((label, addr))
 
-    info_data.append(("Transaction", tx_display))
-    info_data.append(("Notice", f"{len(tx_list)} TX(s)" if len(tx_list) > 1 else ""))
+    # Add each TX as separate row
+    if len(tx_list) > 1:
+        for idx, tx in enumerate(tx_list):
+            label = f"Transaction {idx + 1}" if len(tx_list) > 1 else "Transaction"
+            info_data.append((label, tx))
+    else:
+        info_data.append(("Transaction", tx_list[0] if tx_list else ""))
+        info_data.append(("Notice", ""))
 
     cur_y = r0
     for i, (lbl, val) in enumerate(info_data):

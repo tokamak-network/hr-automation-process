@@ -1162,6 +1162,7 @@ class PayrollUpdate(BaseModel):
     krw_amount: Optional[float] = None
     tax_simulated: Optional[float] = None
     net_pay_krw: Optional[float] = None
+    tx_hash: Optional[str] = None
     status: Optional[str] = None
 
 
@@ -1384,6 +1385,17 @@ async def list_payroll(year: int = 2026, month: Optional[int] = None):
             WHERE p.year=? ORDER BY p.month DESC, m.name
         """, (year,))
     result = [dict(r) for r in await rows.fetchall()]
+
+    # Attach expense totals per member/month
+    for p in result:
+        exp_row = await db.execute(
+            "SELECT COALESCE(SUM(amount_usdt), 0) as expense_total, COUNT(*) as expense_count FROM expenses WHERE member_id=? AND year=? AND month=?",
+            (p["member_id"], p["year"], p["month"]))
+        exp = await exp_row.fetchone()
+        p["expense_usdt"] = exp["expense_total"]
+        p["expense_count"] = exp["expense_count"]
+        p["total_usdt"] = p["usdt_amount"] + exp["expense_total"]
+
     await db.close()
     return result
 
@@ -2708,13 +2720,21 @@ async def generate_payslip_from_payroll(member_id: int, year: int, month: int):
     wallet = await w_row.fetchone()
     erc20_address = wallet["address"] if wallet else member["wallet_address"] or ""
 
+    # 경비 조회
+    exp_rows = await db.execute(
+        "SELECT category, description, amount_usdt, memo FROM expenses WHERE member_id=? AND year=? AND month=? ORDER BY expense_date",
+        (member_id, year, month))
+    expenses = [dict(r) for r in await exp_rows.fetchall()]
+    expense_total = sum(e["amount_usdt"] for e in expenses)
+
     await db.close()
 
     p = dict(payroll)
     rate = p["krw_rate"] or 0
     krw = p["krw_amount"] or 0
+    tx_hash = p.get("tx_hash", "") or ""
 
-    # 세금 분리 (소득세/지방소득세)
+    # 세금 분리 (소득세/지방소득세) — Service Fee에만 적용
     if rate > 0 and krw > 0:
         tax_detail = calculate_tax(int(krw))
         income_tax = tax_detail["income_tax_100"]
@@ -2728,7 +2748,7 @@ async def generate_payslip_from_payroll(member_id: int, year: int, month: int):
     pdf_bytes = generate_payslip_pdf(
         contractor_name=member["name"],
         erc20_address=erc20_address,
-        transaction_url="",
+        transaction_url=tx_hash,
         payment_year=year,
         payment_month=month,
         service_fee_usdt=p["usdt_amount"],
@@ -2737,6 +2757,8 @@ async def generate_payslip_from_payroll(member_id: int, year: int, month: int):
         local_tax_krw=local_tax,
         total_tax_krw=total_tax,
         tax_percentage=100,
+        expenses=expenses,
+        expense_total_usdt=expense_total,
     )
 
     filename = f"payslip_{member['name']}_{year}{str(month).zfill(2)}.pdf"

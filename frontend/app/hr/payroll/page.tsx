@@ -21,7 +21,7 @@ export default function Payroll() {
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<any>(null);
   const [editingPayroll, setEditingPayroll] = useState<any>(null);
-  const [pForm, setPForm] = useState({ usdt_amount: 0, krw_rate: 0, krw_amount: 0, tax_simulated: 0, net_pay_krw: 0, status: "estimated" });
+  const [pForm, setPForm] = useState({ usdt_amount: 0, krw_rate: 0, krw_amount: 0, tax_simulated: 0, net_pay_krw: 0, tx_hash: "", status: "estimated" });
   const [pSaving, setPSaving] = useState(false);
   const [addrMap, setAddrMap] = useState<Record<string, string>>({});
 
@@ -37,7 +37,7 @@ export default function Payroll() {
   }, []);
 
   const startEditPayroll = (p: any) => {
-    setPForm({ usdt_amount: p.usdt_amount, krw_rate: p.krw_rate, krw_amount: p.krw_amount, tax_simulated: p.tax_simulated, net_pay_krw: p.net_pay_krw, status: p.status });
+    setPForm({ usdt_amount: p.usdt_amount, krw_rate: p.krw_rate, krw_amount: p.krw_amount, tax_simulated: p.tax_simulated, net_pay_krw: p.net_pay_krw, tx_hash: p.tx_hash || "", status: p.status });
     setEditingPayroll(p);
   };
 
@@ -66,7 +66,7 @@ export default function Payroll() {
     setPSaving(true);
     await fetch(`/api/hr/payroll/${editingPayroll.id}`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ usdt_amount: Number(pForm.usdt_amount), krw_rate: Number(pForm.krw_rate), krw_amount: Number(pForm.krw_amount), tax_simulated: Number(pForm.tax_simulated), net_pay_krw: Number(pForm.net_pay_krw), status: pForm.status }),
+      body: JSON.stringify({ usdt_amount: Number(pForm.usdt_amount), krw_rate: Number(pForm.krw_rate), krw_amount: Number(pForm.krw_amount), tax_simulated: Number(pForm.tax_simulated), net_pay_krw: Number(pForm.net_pay_krw), tx_hash: pForm.tx_hash, status: pForm.status }),
     });
     setEditingPayroll(null); setPSaving(false); await loadPayrolls();
   };
@@ -204,11 +204,12 @@ export default function Payroll() {
               <thead>
                 <tr className="bg-gray-50">
                   <th className="text-left p-3 text-gray-400">팀원</th>
-                  <th className="text-right p-3 text-gray-400">USDT</th>
+                  <th className="text-right p-3 text-gray-400">Service Fee</th>
+                  <th className="text-right p-3 text-gray-400">경비</th>
+                  <th className="text-right p-3 text-gray-400">총액</th>
                   <th className="text-right p-3 text-gray-400">환율</th>
-                  <th className="text-right p-3 text-gray-400">KRW 환산</th>
-                  <th className="text-right p-3 text-gray-400">세금 (KRW/USD)</th>
-                  <th className="text-right p-3 text-gray-400">실지급 (KRW/USD)</th>
+                  <th className="text-right p-3 text-gray-400">세금 (과세)</th>
+                  <th className="text-right p-3 text-gray-400">실지급</th>
                   <th className="text-right p-3 text-gray-400">상태</th>
                   <th className="text-center p-3 text-gray-400">Payslip</th>
                   <th className="text-right p-3 text-gray-400"></th>
@@ -222,8 +223,9 @@ export default function Payroll() {
                       <div className="text-xs text-gray-400">{p.role}</div>
                     </td>
                     <td className="text-right p-3 font-semibold">{fmt(p.usdt_amount)}</td>
+                    <td className="text-right p-3 text-xs text-gray-500">{p.expense_usdt > 0 ? fmt(p.expense_usdt) : "-"}</td>
+                    <td className="text-right p-3 font-semibold text-[#2A72E5]">{fmt(p.total_usdt || p.usdt_amount)}</td>
                     <td className="text-right p-3 text-gray-400">{p.krw_rate ? fmt(p.krw_rate) : "-"}</td>
-                    <td className="text-right p-3">{p.krw_rate ? `${"\u20A9"}${fmt(p.krw_amount)}` : "-"}</td>
                     <td className="text-right p-3 text-amber-600">
                       {p.krw_rate ? (
                         <>
@@ -238,7 +240,7 @@ export default function Payroll() {
                           <div>{"\u20A9"}{fmt(p.net_pay_krw)}</div>
                           <div className="text-xs text-gray-400 font-normal">${fmt(p.net_pay_krw / p.krw_rate)}</div>
                         </>
-                      ) : <div>${fmt(p.usdt_amount)}</div>}
+                      ) : <div>${fmt(p.total_usdt || p.usdt_amount)}</div>}
                     </td>
                     <td className="text-right p-3">
                       <span className={`text-xs px-2 py-0.5 rounded ${
@@ -275,11 +277,11 @@ export default function Payroll() {
                   <tr className="border-t-2 border-gray-200 font-semibold">
                     <td className="p-3">합계 ({payrolls.length}명)</td>
                     <td className="text-right p-3">{fmt(payrolls.reduce((s: number,p: any) => s + p.usdt_amount, 0))}</td>
+                    <td className="text-right p-3 text-xs text-gray-500">{fmt(payrolls.reduce((s: number,p: any) => s + (p.expense_usdt || 0), 0))}</td>
+                    <td className="text-right p-3 text-[#2A72E5]">{fmt(payrolls.reduce((s: number,p: any) => s + (p.total_usdt || p.usdt_amount), 0))}</td>
                     <td className="text-right p-3"></td>
-                    <td className="text-right p-3">{"\u20A9"}{fmt(payrolls.reduce((s: number,p: any) => s + p.krw_amount, 0))}</td>
                     <td className="text-right p-3 text-amber-600">{"\u20A9"}{fmt(payrolls.reduce((s: number,p: any) => s + p.tax_simulated, 0))}</td>
                     <td className="text-right p-3">{"\u20A9"}{fmt(payrolls.reduce((s: number,p: any) => s + p.net_pay_krw, 0))}</td>
-                    <td></td>
                     <td></td>
                     <td></td>
                   </tr>
@@ -461,6 +463,11 @@ export default function Payroll() {
                   <option value="confirmed">확정</option>
                   <option value="paid">지급완료</option>
                 </select>
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-gray-500 mb-1 block">TX Hash</label>
+                <input value={pForm.tx_hash || ""} onChange={e => setPForm({ ...pForm, tx_hash: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:border-[#2A72E5]" placeholder="0x..." />
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-5">

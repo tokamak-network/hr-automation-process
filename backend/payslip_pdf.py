@@ -187,6 +187,7 @@ def generate_payslip_pdf(
     issue_date: str = "",
     expenses: list = None,
     expense_total_usdt: float = 0,
+    erc20_addresses: list = None,
 ) -> bytes:
     _init_fonts()
 
@@ -275,16 +276,22 @@ def generate_payslip_pdf(
                 tx_list.append(line)
     tx_display = "\n".join(tx_list) if tx_list else ""
 
-    # === INFO COLUMN (7 rows) ===
+    # === INFO COLUMN (dynamic rows) ===
+    addr_list = erc20_addresses or ([erc20_address] if erc20_address else [])
+
     info_data = [
         ("Company Name", "TOKAMAK NETWORK PTE. LTD."),
         ("Full name of Contractor", contractor_name),
         ("Date of payment", pay_date.strftime("%b %d, %Y")),
         ("Start and end date of service fee period", f"{p_start.strftime('%B %d, %Y')} to {p_end.strftime('%B %d, %Y')}"),
-        ("ERC20 Address", erc20_address or ""),
-        ("Transaction", tx_display),
-        ("Notice", f"{len(tx_list)} TX(s)" if len(tx_list) > 1 else ""),
     ]
+    # Add each address as separate row
+    for idx, addr in enumerate(addr_list):
+        label = f"ERC20 Address {idx + 1}" if len(addr_list) > 1 else "ERC20 Address"
+        info_data.append((label, addr))
+
+    info_data.append(("Transaction", tx_display))
+    info_data.append(("Notice", f"{len(tx_list)} TX(s)" if len(tx_list) > 1 else ""))
 
     cur_y = r0
     for i, (lbl, val) in enumerate(info_data):
@@ -368,7 +375,7 @@ def generate_payslip_pdf(
     _draw_cell(c, tx + tl, net_ry, tv, net_h, [_fmt_int(net_payout)], _FONT_B, 12, DARK, fill=LIGHT_BLUE, align="right", bold=True)
 
     # ── KRW Reference ── (positioned below Info column which is always 7 rows)
-    info_bottom = r0 - 7 * rh
+    info_bottom = cur_y
     ref_y = info_bottom - 18
     ref_w = pw - 2 * mx
     ref_rh = 22

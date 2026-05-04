@@ -2719,9 +2719,9 @@ async def generate_payslip_from_payroll(member_id: int, year: int, month: int):
     w_rows = await db.execute("SELECT label, address FROM member_wallets WHERE member_id=? ORDER BY id", (member_id,))
     wallets = [dict(r) for r in await w_rows.fetchall()]
     if wallets:
-        erc20_address = "\n".join(f"{w['address']} ({w['label']})" for w in wallets)
+        erc20_addresses = [w['address'] for w in wallets]
     else:
-        erc20_address = member["wallet_address"] or ""
+        erc20_addresses = [member["wallet_address"] or ""]
 
     # 경비 조회
     exp_rows = await db.execute(
@@ -2750,7 +2750,8 @@ async def generate_payslip_from_payroll(member_id: int, year: int, month: int):
 
     pdf_bytes = generate_payslip_pdf(
         contractor_name=member["name"],
-        erc20_address=erc20_address,
+        erc20_address=erc20_addresses[0] if len(erc20_addresses) == 1 else "",
+        erc20_addresses=erc20_addresses,
         transaction_url=tx_hash,
         payment_year=year,
         payment_month=month,

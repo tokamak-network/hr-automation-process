@@ -1600,6 +1600,7 @@ class ExpenseCreate(BaseModel):
     category: str
     description: str = ""
     tx_hash: str = ""
+    memo: str = ""
     status: str = "pending"
     expense_date: str = ""
 
@@ -1608,6 +1609,7 @@ class ExpenseUpdate(BaseModel):
     category: Optional[str] = None
     description: Optional[str] = None
     tx_hash: Optional[str] = None
+    memo: Optional[str] = None
     status: Optional[str] = None
     expense_date: Optional[str] = None
 
@@ -1634,8 +1636,8 @@ async def list_expenses(year: int = 2026, month: Optional[int] = None):
 async def create_expense(data: ExpenseCreate):
     db = await get_db()
     cursor = await db.execute(
-        "INSERT INTO expenses (member_id, year, month, amount_usdt, category, description, tx_hash, status, expense_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,datetime('now'))",
-        (data.member_id, data.year, data.month, data.amount_usdt, data.category, data.description, data.tx_hash, data.status, data.expense_date))
+        "INSERT INTO expenses (member_id, year, month, amount_usdt, category, description, tx_hash, memo, status, expense_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'))",
+        (data.member_id, data.year, data.month, data.amount_usdt, data.category, data.description, data.tx_hash, data.memo, data.status, data.expense_date))
     await db.commit()
     eid = cursor.lastrowid
     await db.close()
@@ -1696,6 +1698,24 @@ async def download_expenses(year: int = 2026, month: Optional[int] = None):
         headers={"Content-Disposition": f"attachment; filename={fname}"})
 
 
+@app.post("/api/hr/expenses/bulk-status")
+async def bulk_update_expense_status(data: dict):
+    """경비 일괄 상태 변경"""
+    db = await get_db()
+    year = data["year"]
+    month = data.get("month")
+    status = data["status"]
+    if month:
+        await db.execute("UPDATE expenses SET status=? WHERE year=? AND month=?", (status, year, month))
+    else:
+        await db.execute("UPDATE expenses SET status=? WHERE year=?", (status, year))
+    await db.commit()
+    row = await db.execute("SELECT COUNT(*) as cnt FROM expenses WHERE year=?" + (" AND month=?" if month else ""), [year] + ([month] if month else []))
+    cnt = (await row.fetchone())["cnt"]
+    await db.close()
+    label = {"pending": "대기", "approved": "승인", "paid": "지급완료"}.get(status, status)
+    return {"message": f"{cnt}건 → {label}", "count": cnt}
+
 @app.post("/api/hr/expenses/upload")
 async def upload_expenses(file: UploadFile = File(...)):
     """경비 엑셀 일괄 업로드. 컬럼: 연도, 월, 이름, 금액(USDT), 카테고리, 내용, TX Hash, 상태, 발생일"""
@@ -1718,8 +1738,9 @@ async def upload_expenses(file: UploadFile = File(...)):
         category = str(row[4] or "기타").strip()
         description = str(row[5] or "").strip()
         tx_hash = str(row[6] or "").strip() if len(row) > 6 else ""
-        status = str(row[7] or "pending").strip() if len(row) > 7 else "pending"
-        expense_date = str(row[8] or "").strip() if len(row) > 8 else ""
+        memo = str(row[7] or "").strip() if len(row) > 7 else ""
+        status = str(row[8] or "pending").strip() if len(row) > 8 else "pending"
+        expense_date = str(row[9] or "").strip() if len(row) > 9 else ""
 
         r = await db.execute("SELECT id FROM hr_members WHERE name=?", (name,))
         member = await r.fetchone()
@@ -1728,8 +1749,8 @@ async def upload_expenses(file: UploadFile = File(...)):
             continue
 
         await db.execute(
-            "INSERT INTO expenses (member_id, year, month, amount_usdt, category, description, tx_hash, status, expense_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,datetime('now'))",
-            (member["id"], year, month, amount, category, description, tx_hash, status, expense_date))
+            "INSERT INTO expenses (member_id, year, month, amount_usdt, category, description, tx_hash, memo, status, expense_date, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'))",
+            (member["id"], year, month, amount, category, description, tx_hash, memo, status, expense_date))
         added += 1
 
     await db.commit()
@@ -1738,17 +1759,27 @@ async def upload_expenses(file: UploadFile = File(...)):
 
 @app.get("/api/hr/expenses/template")
 async def download_expenses_template():
-    """경비 업로드용 양식"""
+    """경비 업로드용 양식 (카테고리 드롭다운 포함)"""
     import openpyxl, io
+    from openpyxl.worksheet.datavalidation import DataValidation
     from fastapi.responses import StreamingResponse
+
+    categories = "출장비,장비,교통비,식비,소프트웨어,교육,기타"
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "경비"
-    ws.append(["연도", "월", "이름", "금액(USDT)", "카테고리", "내용", "TX Hash", "상태", "발생일"])
-    ws.append([2026, 4, "예시", 100, "출장비", "서울 출장", "", "pending", "2026-04-15"])
-    for col, w in [("A",8),("B",6),("C",12),("D",12),("E",10),("F",20),("G",20),("H",10),("I",12)]:
+    ws.append(["연도", "월", "이름", "금액(USDT)", "카테고리", "내용", "TX Hash", "메모", "상태", "발생일"])
+    ws.append([2026, 5, "예시", 100, "출장비", "서울 출장", "", "5월 Service Fee에 포함 지급", "pending", "2026-05-01"])
+    for col, w in [("A",8),("B",6),("C",12),("D",12),("E",12),("F",20),("G",20),("H",25),("I",10),("J",12)]:
         ws.column_dimensions[col].width = w
+
+    # 카테고리 드롭다운 (E열, 2~100행)
+    dv = DataValidation(type="list", formula1=f'"{categories}"', allow_blank=True)
+    dv.error = "카테고리를 선택하세요"
+    dv.errorTitle = "카테고리 오류"
+    ws.add_data_validation(dv)
+    dv.add(f"E2:E100")
 
     buf = io.BytesIO()
     wb.save(buf)

@@ -286,22 +286,22 @@ def generate_payslip_pdf(
         ("Notice", f"{len(tx_list)} TX(s)" if len(tx_list) > 1 else ""),
     ]
 
+    cur_y = r0
     for i, (lbl, val) in enumerate(info_data):
-        ry = r0 - (i + 1) * rh
+        is_addr = lbl in ("ERC20 Address", "Transaction")
+        val_sz = 6.5 if is_addr else 8.5
 
-        # Label — bold, centered horizontally and vertically, wrap if needed
-        lbl_lines = _wrap_text(c, lbl, _FONT_B, 8.5, il - 12)
-        _draw_cell(c, ix, ry, il, rh, lbl_lines, _FONT_B, 8.5, DARK, align="center", bold=True)
-
-        # Value — wrap long strings (ERC20, TX), smaller font for addresses
+        # Calculate needed height based on wrapped lines
         max_val_w = iv - 14
-        val_sz = 7 if lbl in ("ERC20 Address", "Transaction") else 8.5
-        if val and c.stringWidth(val, _FONT, val_sz) > max_val_w:
-            val_lines = _wrap_text(c, val, _FONT, val_sz, max_val_w)
-        else:
-            # Handle multi-word wrapping for "March 01, 2026 to March 31, 2026"
-            val_lines = _wrap_text(c, val, _FONT, val_sz, max_val_w) if val else [""]
-        _draw_cell(c, ix + il, ry, iv, rh, val_lines, _FONT, val_sz, DARK, align="left", bold=True)
+        val_lines = _wrap_text(c, val, _FONT, val_sz, max_val_w) if val else [""]
+        lbl_lines = _wrap_text(c, lbl, _FONT_B, 8.5, il - 12)
+        line_count = max(len(val_lines), len(lbl_lines))
+        row_h = max(rh, line_count * (val_sz + 4) + 10) if is_addr else rh
+
+        ry = cur_y - row_h
+        _draw_cell(c, ix, ry, il, row_h, lbl_lines, _FONT_B, 8.5, DARK, align="center", bold=True)
+        _draw_cell(c, ix + il, ry, iv, row_h, val_lines, _FONT, val_sz, DARK, align="left", bold=True)
+        cur_y = ry
 
     # === SERVICE FEE & EXPENSES COLUMN ===
     total_payout = service_fee_usdt + expense_total_usdt

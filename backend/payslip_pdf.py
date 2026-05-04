@@ -296,44 +296,42 @@ def generate_payslip_pdf(
 
     # === SERVICE FEE & EXPENSES COLUMN ===
     total_payout = service_fee_usdt + expense_total_usdt
+    exp_list = expenses or []
 
-    fee_items = [
-        (0, 1, "Basic service fee\nfor each period", _fmt_int(service_fee_usdt), False),
+    # -- type: "normal", "expense_item", "subtotal", "total"
+    fee_rows = [
+        {"lbl": "Basic service fee\nfor each period", "val": _fmt_int(service_fee_usdt), "type": "normal"},
     ]
 
-    # Add expense items dynamically
-    exp_list = expenses or []
     if exp_list:
-        row_idx = 1
-        for exp in exp_list[:4]:  # max 4 expense items in the box
+        for exp in exp_list[:5]:
             cat = exp.get("category", "")
             desc = exp.get("description", "") or exp.get("memo", "")
-            label = f"{cat}: {desc}" if desc else cat
+            label = f"  · {cat}: {desc}" if desc else f"  · {cat}"
             amt = exp.get("amount_usdt", 0)
-            fee_items.append((row_idx, 1, label, _fmt_int(amt), False))
-            row_idx += 1
-        # Expense subtotal if multiple
-        if len(exp_list) > 1:
-            fee_items.append((row_idx, 1, "Expense Subtotal\n(Non-taxable)", _fmt_int(expense_total_usdt), False))
-            row_idx += 1
+            fee_rows.append({"lbl": label, "val": _fmt_int(amt), "type": "expense_item"})
+        fee_rows.append({"lbl": "Expense Subtotal\n(Non-taxable)", "val": _fmt_int(expense_total_usdt), "type": "subtotal"})
     else:
-        row_idx = 1
-        fee_items.append((1, 1, "Expenses\n(Non-taxable)", "-", False))
-        row_idx = 2
+        fee_rows.append({"lbl": "Expenses\n(Non-taxable)", "val": "-", "type": "normal"})
 
-    # Total row
-    fee_items.append((row_idx, 1, "\u24b6 Total", _fmt_int(total_payout), True))
+    fee_rows.append({"lbl": "\u24b6 Total", "val": _fmt_int(total_payout), "type": "total"})
 
-    for start, span, lbl, val, is_tot in fee_items:
-        ry = r0 - (start + span) * rh
-        h = rh * span
+    for i, item in enumerate(fee_rows):
+        ry = r0 - (i + 1) * rh
+        t = item["type"]
 
-        bg = BLUE if is_tot else None
-        tc = WHITE if is_tot else DARK
-
-        lbl_lines = lbl.split("\n")
-        _draw_cell(c, fx, ry, fl, h, lbl_lines, _FONT_B, 9, tc, fill=bg, align="center", bold=True)
-        _draw_cell(c, fx + fl, ry, fv, h, [val], _FONT_B, 10, DARK, align="right", bold=True)
+        if t == "total":
+            _draw_cell(c, fx, ry, fl, rh, item["lbl"].split("\n"), _FONT_B, 9, WHITE, fill=BLUE, align="center", bold=True)
+            _draw_cell(c, fx + fl, ry, fv, rh, [item["val"]], _FONT_B, 10, DARK, align="right", bold=True)
+        elif t == "subtotal":
+            _draw_cell(c, fx, ry, fl, rh, item["lbl"].split("\n"), _FONT_B, 8, DARK, fill=BG_HEADER, align="center", bold=True)
+            _draw_cell(c, fx + fl, ry, fv, rh, [item["val"]], _FONT_B, 9, DARK, fill=BG_HEADER, align="right", bold=True)
+        elif t == "expense_item":
+            _draw_cell(c, fx, ry, fl, rh, [item["lbl"]], _FONT, 7.5, GRAY, align="left")
+            _draw_cell(c, fx + fl, ry, fv, rh, [item["val"]], _FONT, 8, GRAY, align="right")
+        else:
+            _draw_cell(c, fx, ry, fl, rh, item["lbl"].split("\n"), _FONT_B, 9, DARK, align="center", bold=True)
+            _draw_cell(c, fx + fl, ry, fv, rh, [item["val"]], _FONT_B, 10, DARK, align="right", bold=True)
 
     # === TAX COLUMN (no empty rows) ===
     tax_items = [

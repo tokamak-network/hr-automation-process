@@ -2715,10 +2715,13 @@ async def generate_payslip_from_payroll(member_id: int, year: int, month: int):
         await db.close()
         raise HTTPException(404, "Payroll not found")
 
-    # 지갑 주소 (첫 번째)
-    w_row = await db.execute("SELECT address FROM member_wallets WHERE member_id=? LIMIT 1", (member_id,))
-    wallet = await w_row.fetchone()
-    erc20_address = wallet["address"] if wallet else member["wallet_address"] or ""
+    # 지갑 주소 (전체)
+    w_rows = await db.execute("SELECT label, address FROM member_wallets WHERE member_id=? ORDER BY id", (member_id,))
+    wallets = [dict(r) for r in await w_rows.fetchall()]
+    if wallets:
+        erc20_address = "\n".join(f"{w['address']} ({w['label']})" for w in wallets)
+    else:
+        erc20_address = member["wallet_address"] or ""
 
     # 경비 조회
     exp_rows = await db.execute(

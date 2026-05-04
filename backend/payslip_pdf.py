@@ -266,6 +266,15 @@ def generate_payslip_pdf(
     tl = tax_w * 0.55
     tv = tax_w * 0.45
 
+    # Parse multiple TX hashes (newline or comma separated)
+    tx_list = []
+    if transaction_url:
+        for line in transaction_url.replace(",", "\n").split("\n"):
+            line = line.strip()
+            if line:
+                tx_list.append(line)
+    tx_display = "\n".join(tx_list) if tx_list else ""
+
     # === INFO COLUMN (7 rows) ===
     info_data = [
         ("Company Name", "TOKAMAK NETWORK PTE. LTD."),
@@ -273,8 +282,8 @@ def generate_payslip_pdf(
         ("Date of payment", pay_date.strftime("%b %d, %Y")),
         ("Start and end date of service fee period", f"{p_start.strftime('%B %d, %Y')} to {p_end.strftime('%B %d, %Y')}"),
         ("ERC20 Address", erc20_address or ""),
-        ("Transaction URL", transaction_url or ""),
-        ("Notice", ""),
+        ("Transaction", tx_display),
+        ("Notice", f"{len(tx_list)} TX(s)" if len(tx_list) > 1 else ""),
     ]
 
     for i, (lbl, val) in enumerate(info_data):

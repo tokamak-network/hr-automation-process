@@ -465,9 +465,10 @@ export default function Payroll() {
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="text-xs font-medium text-gray-500 mb-1 block">TX Hash</label>
-                <input value={pForm.tx_hash || ""} onChange={e => setPForm({ ...pForm, tx_hash: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:border-[#2A72E5]" placeholder="0x..." />
+                <label className="text-xs font-medium text-gray-500 mb-1 block">TX Hash (복수 가능 — 줄바꿈으로 구분)</label>
+                <textarea value={pForm.tx_hash || ""} onChange={e => setPForm({ ...pForm, tx_hash: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:border-[#2A72E5]" rows={2}
+                  placeholder={"0xabc... (주소1 → 2,000 USDT)\n0xdef... (주소2 → 5,000 USDT)"} />
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-5">

@@ -14,7 +14,7 @@ interface Expense {
   description: string; tx_hash: string; status: string; expense_date: string;
 }
 
-const emptyForm = { member_id: 0, year: currentYear, month: currentMonth, amount_usdt: 0, category: "기타", description: "", tx_hash: "", status: "pending", expense_date: "" };
+const emptyForm = { member_id: 0, year: currentYear, month: currentMonth, amount_usdt: 0, category: "기타", description: "", tx_hash: "", memo: "", status: "pending", expense_date: "" };
 
 export default function Expenses() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -42,7 +42,7 @@ export default function Expenses() {
     if (editingId) {
       await fetch(`/api/hr/expenses/${editingId}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount_usdt: Number(form.amount_usdt), category: form.category, description: form.description, tx_hash: form.tx_hash, status: form.status, expense_date: form.expense_date }),
+        body: JSON.stringify({ amount_usdt: Number(form.amount_usdt), category: form.category, description: form.description, tx_hash: form.tx_hash, memo: form.memo, status: form.status, expense_date: form.expense_date }),
       });
     } else {
       await fetch("/api/hr/expenses", {
@@ -117,6 +117,29 @@ export default function Expenses() {
             </button>
           ))}
         </div>
+        {expenses.length > 0 && (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs text-gray-400">일괄:</span>
+            {(["pending", "approved", "paid"] as const).map(s => {
+              const label = s === "pending" ? "대기" : s === "approved" ? "승인" : "지급완료";
+              const color = s === "paid" ? "bg-emerald-500 hover:bg-emerald-600" : s === "approved" ? "bg-blue-500 hover:bg-blue-600" : "bg-amber-500 hover:bg-amber-600";
+              return (
+                <button key={s} onClick={async () => {
+                  if (!confirm(`${year}년 ${month ? month + "월" : "전체"} 경비를 "${label}"(으)로 변경하시겠습니까?`)) return;
+                  const res = await fetch("/api/hr/expenses/bulk-status", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ year, month, status: s }),
+                  });
+                  const data = await res.json();
+                  alert(data.message);
+                  await loadExpenses();
+                }} className={`text-xs px-2.5 py-1 rounded text-white ${color}`}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl overflow-hidden bg-white border border-gray-200">
@@ -129,6 +152,7 @@ export default function Expenses() {
               <th className="text-left p-3 text-gray-400">내용</th>
               <th className="text-right p-3 text-gray-400">금액 (USDT)</th>
               <th className="text-left p-3 text-gray-400">TX Hash</th>
+              <th className="text-left p-3 text-gray-400">메모</th>
               <th className="text-right p-3 text-gray-400">상태</th>
               <th className="text-right p-3 text-gray-400"></th>
             </tr>
@@ -152,6 +176,7 @@ export default function Expenses() {
                       className="text-blue-500 hover:underline">{e.tx_hash.slice(0, 12)}...</a>
                   ) : <span className="text-gray-300">-</span>}
                 </td>
+                <td className="p-3 text-xs text-gray-500 max-w-[200px] truncate" title={e.memo || ""}>{e.memo || "-"}</td>
                 <td className="text-right p-3">
                   <span className={`text-xs px-2 py-0.5 rounded ${
                     e.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
@@ -175,7 +200,7 @@ export default function Expenses() {
               <tr className="border-t-2 border-gray-200 font-semibold">
                 <td className="p-3" colSpan={4}>합계 ({expenses.length}건)</td>
                 <td className="text-right p-3">{fmt(totalUsdt)} USDT</td>
-                <td colSpan={3}></td>
+                <td colSpan={4}></td>
               </tr>
             </tfoot>
           )}
@@ -235,6 +260,12 @@ export default function Expenses() {
                 <input value={form.tx_hash} onChange={e => setForm({ ...form, tx_hash: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:border-[#2A72E5]"
                   placeholder="0x..." />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs font-medium text-gray-500 mb-1 block">메모</label>
+                <input value={form.memo} onChange={e => setForm({ ...form, memo: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A72E5]"
+                  placeholder="예: 5월 Service Fee에 포함 지급" />
               </div>
               {!editingId && (
                 <>

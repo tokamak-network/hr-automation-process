@@ -2765,7 +2765,7 @@ async def generate_payslip_from_payroll(member_id: int, year: int, month: int):
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
 
 @app.post("/api/hr/payslip/pdf")

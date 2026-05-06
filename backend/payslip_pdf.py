@@ -50,11 +50,10 @@ def _init_fonts():
 
 
 def _ceil10_usdt(krw_amount: float, exchange_rate: float) -> float:
-    """KRW 세금을 USDT로 환산 후 10의 자리 올림"""
+    """KRW 세금을 USDT로 환산 (반올림)"""
     if exchange_rate <= 0:
         return 0
-    usdt = krw_amount / exchange_rate
-    return math.ceil(usdt / 10) * 10
+    return round(krw_amount / exchange_rate)
 
 
 def _fmt_int(n: float) -> str:

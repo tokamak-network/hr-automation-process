@@ -2737,16 +2737,15 @@ async def generate_payslip_from_payroll(member_id: int, year: int, month: int):
     krw = p["krw_amount"] or 0
     tx_hash = p.get("tx_hash", "") or ""
 
-    # 세금 분리 (소득세/지방소득세) — Service Fee에만 적용
-    if rate > 0 and krw > 0:
-        tax_detail = calculate_tax(int(krw))
-        income_tax = tax_detail["income_tax_100"]
-        local_tax = tax_detail["local_tax_100"]
-        total_tax = tax_detail["total_tax_100"]
+    # 세금: DB 저장값 우선 사용 (급여관리에서 입력/계산된 실제 과세 금액)
+    total_tax = int(p["tax_simulated"] or 0)
+    if total_tax > 0 and rate > 0:
+        # DB 총 세금에서 소득세/지방소득세 비율로 분리 (지방소득세 = 소득세의 10%)
+        income_tax = int(total_tax / 1.1)
+        local_tax = total_tax - income_tax
     else:
         income_tax = 0
         local_tax = 0
-        total_tax = int(p["tax_simulated"] or 0)
 
     pdf_bytes = generate_payslip_pdf(
         contractor_name=member["name"],

@@ -13,7 +13,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import sqlite3
-from database import init_db, get_db, DB_PATH
+from db import init_db, get_db
+from database import DB_PATH
 from analyzer import analyze_repo, ai_analyze, analyze_github_profile, TEAM_MEMBERS, recommend_reviewers, calculate_weighted_score
 from team_profiler import scan_org_profiles
 from linkedin_google import search_linkedin_candidates, get_linkedin_candidates, update_candidate_status as update_linkedin_status, init_linkedin_db

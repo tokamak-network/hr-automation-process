@@ -1,6 +1,7 @@
 "use client";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/lib/AuthContext";
 
 const sections = [
   {
@@ -30,6 +31,7 @@ const sections = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { user, signOut } = useAuth();
 
   return (
     <aside className="w-60 shrink-0 border-r border-gray-200 flex flex-col h-screen sticky top-0 bg-white">
@@ -73,8 +75,14 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-gray-200 text-xs text-gray-400">
-        Tokamak HR v0.2.0
+      <div className="p-4 border-t border-gray-200">
+        {user && (
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-400 truncate">{user.email}</span>
+            <button onClick={signOut} className="text-xs text-red-400 hover:text-red-600">Logout</button>
+          </div>
+        )}
+        <div className="text-xs text-gray-300">Tokamak HR v0.3.1</div>
       </div>
     </aside>
   );

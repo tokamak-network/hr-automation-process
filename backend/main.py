@@ -2808,6 +2808,198 @@ async def usdt_rate():
     return {"pair": "USDT/KRW", "rate": 1352.50, "source": "mock", "timestamp": datetime.now().isoformat()}
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Accounting — Transaction Classifier
+# ══════════════════════════════════════════════════════════════════════════════
+
+from accounting.classifier import classify_transactions
+
+# ── Chart of Accounts ──
+
+@app.get("/api/accounting/chart")
+async def list_chart_of_accounts():
+    db = await get_db()
+    rows = await db.execute("SELECT * FROM chart_of_accounts WHERE is_active=1 ORDER BY category, name")
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+@app.post("/api/accounting/chart")
+async def add_account(data: dict):
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO chart_of_accounts (code, name, category) VALUES (?, ?, ?)",
+        (data["code"], data["name"], data["category"]))
+    await db.commit()
+    await db.close()
+    return {"message": "Created"}
+
+
+# ── Counterparty Rules ──
+
+@app.get("/api/accounting/rules")
+async def list_rules():
+    db = await get_db()
+    rows = await db.execute("SELECT * FROM counterparty_rules ORDER BY pattern")
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+@app.post("/api/accounting/rules")
+async def add_rule(data: dict):
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO counterparty_rules (pattern, account_code, residence, wht_flag, note, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+        (data["pattern"], data["account_code"], data.get("residence"), data.get("wht_flag", 0), data.get("note", "")))
+    await db.commit()
+    await db.close()
+    return {"message": "Rule added"}
+
+@app.put("/api/accounting/rules/{rule_id}")
+async def update_rule(rule_id: int, data: dict):
+    db = await get_db()
+    await db.execute(
+        "UPDATE counterparty_rules SET pattern=?, account_code=?, residence=?, wht_flag=?, note=?, updated_at=datetime('now') WHERE id=?",
+        (data["pattern"], data["account_code"], data.get("residence"), data.get("wht_flag", 0), data.get("note", ""), rule_id))
+    await db.commit()
+    await db.close()
+    return {"message": "Updated"}
+
+@app.delete("/api/accounting/rules/{rule_id}")
+async def delete_rule(rule_id: int):
+    db = await get_db()
+    await db.execute("DELETE FROM counterparty_rules WHERE id=?", (rule_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deleted"}
+
+
+# ── Classify Transactions ──
+
+@app.post("/api/accounting/classify")
+async def run_classification(year: Optional[int] = None):
+    """Run classification on fiat_transactions. Optionally filter by fiscal year."""
+    db = await get_db()
+
+    # Get rules
+    rule_rows = await db.execute("SELECT * FROM counterparty_rules ORDER BY id")
+    rules = [dict(r) for r in await rule_rows.fetchall()]
+
+    # Get unclassified (or all) transactions
+    if year:
+        # Fiscal year: Mar [year-1] ~ Feb [year]
+        fy_start = f"{year - 1}-03-01"
+        fy_end = f"{year}-02-28"
+        tx_rows = await db.execute(
+            "SELECT * FROM fiat_transactions WHERE tx_date >= ? AND tx_date <= ? ORDER BY tx_date",
+            (fy_start, fy_end))
+    else:
+        tx_rows = await db.execute("SELECT * FROM fiat_transactions ORDER BY tx_date")
+
+    transactions = [dict(r) for r in await tx_rows.fetchall()]
+
+    # Run classifier
+    result = classify_transactions(transactions, rules)
+
+    # Bulk update: one UPDATE per rule pattern (much faster than per-transaction)
+    for rule in rules:
+        pattern = rule["pattern"]
+        code = rule["account_code"]
+        await db.execute(
+            "UPDATE fiat_transactions SET account_code=?, classified_by='auto' WHERE LOWER(counterparty) LIKE ? AND (classified_by = 'unclassified' OR classified_by IS NULL)",
+            (code, f"%{pattern.lower()}%"))
+
+    await db.commit()
+    await db.close()
+
+    return {
+        "message": f"{result['stats']['auto']}건 자동 분류, {result['stats']['unclassified']}건 미분류",
+        "stats": result["stats"],
+        "unclassified": result["unclassified"][:50],
+    }
+
+
+@app.post("/api/accounting/classify-manual")
+async def classify_manual(data: dict):
+    """Manually classify a transaction and optionally save as rule."""
+    db = await get_db()
+    tx_id = data["tx_id"]
+    account_code = data["account_code"]
+    save_rule = data.get("save_rule", False)
+    counterparty = data.get("counterparty", "")
+
+    await db.execute(
+        "UPDATE fiat_transactions SET account_code=?, classified_by='manual' WHERE id=?",
+        (account_code, tx_id))
+
+    if save_rule and counterparty:
+        # Check if rule already exists
+        existing = await db.execute(
+            "SELECT id FROM counterparty_rules WHERE pattern=?", (counterparty,))
+        ex = await existing.fetchone()
+        if not ex:
+            await db.execute(
+                "INSERT INTO counterparty_rules (pattern, account_code, residence, wht_flag, note, created_at) VALUES (?, ?, ?, 0, 'Auto-created from manual classification', datetime('now'))",
+                (counterparty, account_code, data.get("residence")))
+
+    await db.commit()
+    await db.close()
+    return {"message": "Classified"}
+
+
+@app.get("/api/accounting/summary")
+async def classification_summary(year: Optional[int] = None):
+    """Get classification summary by account."""
+    db = await get_db()
+
+    conditions = []
+    params = []
+    if year:
+        fy_start = f"{year - 1}-03-01"
+        fy_end = f"{year}-02-28"
+        conditions.append("tx_date >= ? AND tx_date <= ?")
+        params.extend([fy_start, fy_end])
+
+    where = " WHERE " + " AND ".join(conditions) if conditions else ""
+
+    # Total / classified / unclassified
+    total = await db.execute(f"SELECT COUNT(*) as cnt FROM fiat_transactions{where}", tuple(params))
+    total_row = await total.fetchone()
+
+    classified = await db.execute(
+        f"SELECT COUNT(*) as cnt FROM fiat_transactions{where}{' AND' if where else ' WHERE'} classified_by != 'unclassified'",
+        tuple(params))
+    classified_row = await classified.fetchone()
+
+    # By account
+    by_account = await db.execute(f"""
+        SELECT account_code, direction, COUNT(*) as cnt, SUM(amount) as total_amount
+        FROM fiat_transactions{where}{' AND' if where else ' WHERE'} account_code IS NOT NULL
+        GROUP BY account_code, direction ORDER BY account_code
+    """, tuple(params))
+    by_account_rows = [dict(r) for r in await by_account.fetchall()]
+
+    # WHT flagged
+    wht = await db.execute("""
+        SELECT ft.counterparty, ft.amount, ft.currency, ft.tx_date, cr.residence
+        FROM fiat_transactions ft
+        JOIN counterparty_rules cr ON LOWER(ft.counterparty) LIKE '%%' || LOWER(cr.pattern) || '%%'
+        WHERE cr.wht_flag = 1
+        ORDER BY ft.tx_date DESC LIMIT 20
+    """)
+    wht_rows = [dict(r) for r in await wht.fetchall()]
+
+    await db.close()
+
+    return {
+        "total": total_row["cnt"],
+        "classified": classified_row["cnt"],
+        "unclassified": total_row["cnt"] - classified_row["cnt"],
+        "by_account": by_account_rows,
+        "wht_flagged": wht_rows,
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     import argparse

@@ -27,6 +27,12 @@ const sections = [
       { href: "/hr/settings", label: "설정", icon: "⚙️" },
     ],
   },
+  {
+    title: "회계",
+    items: [
+      { href: "/accounting/classifier", label: "거래 분류", icon: "🏷️" },
+    ],
+  },
 ];
 
 export default function Sidebar() {

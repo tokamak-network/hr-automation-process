@@ -11,6 +11,7 @@ export default function ClassifierPage() {
   const [year, setYear] = useState<number | null>(null);
   const [classifying, setClassifying] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
 
   const loadSummary = async () => {
     const q = year ? `?year=${year}` : "";
@@ -59,6 +60,10 @@ export default function ClassifierPage() {
           <p className="text-sm text-gray-400">Transaction Classifier — 거래상대별 회계 계정 자동 매핑</p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setShowGuide(!showGuide)}
+            className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+            {showGuide ? "닫기" : "가이드"}
+          </button>
           <button onClick={() => setShowRules(!showRules)}
             className="px-3 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
             {showRules ? "분류 보기" : "룰 관리"}
@@ -231,6 +236,95 @@ export default function ClassifierPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Guide Panel */}
+      {showGuide && (
+        <div className="fixed inset-0 bg-black/40 flex justify-end z-50" onClick={() => setShowGuide(false)}>
+          <div className="w-full max-w-2xl bg-white h-full overflow-y-auto shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex justify-between items-center">
+              <h2 className="text-lg font-bold">거래 분류기 가이드</h2>
+              <button onClick={() => setShowGuide(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+            </div>
+            <div className="p-6 prose prose-sm max-w-none">
+              <h3>이 기능은 무엇인가요?</h3>
+              <p>법인 은행 거래내역(Aspire, WISE)을 <strong>회계 계정</strong>에 자동으로 분류하는 기능입니다.</p>
+              <p>예를 들어:</p>
+              <ul>
+                <li>"BIT CONSULTANCY FZCO"로부터 입금 → <strong>Sales</strong> (매출)</li>
+                <li>"Anthropic"에 출금 → <strong>Subscription fee</strong> (구독료)</li>
+                <li>"Jehyuk Jang"에 출금 → <strong>Salary</strong> (급여)</li>
+              </ul>
+
+              <h3>핵심 개념</h3>
+
+              <h4>1. Chart of Accounts (계정 체계)</h4>
+              <p>회사의 모든 수입/지출을 분류하는 카테고리입니다.</p>
+              <table>
+                <thead><tr><th>구분</th><th>계정</th><th>설명</th></tr></thead>
+                <tbody>
+                  <tr><td>수입</td><td>Sales</td><td>BIT CONSULTANCY 매출</td></tr>
+                  <tr><td>원가</td><td>Consulting fee</td><td>Onther 외주비</td></tr>
+                  <tr><td>비용</td><td>Salary</td><td>직원 급여</td></tr>
+                  <tr><td></td><td>Director remuneration</td><td>이사 보수</td></tr>
+                  <tr><td></td><td>Subscription fee</td><td>SaaS 구독</td></tr>
+                  <tr><td></td><td>Professional fee</td><td>법무/세무 자문</td></tr>
+                  <tr><td></td><td>Office rental</td><td>사무실 임대</td></tr>
+                  <tr><td>기타수입</td><td>Other income</td><td>캐시백, 이자</td></tr>
+                  <tr><td>내부</td><td>Internal transfer</td><td>계좌간 이체</td></tr>
+                </tbody>
+              </table>
+
+              <h4>2. Counterparty Rules (분류 룰)</h4>
+              <p><strong>거래상대 이름</strong> → <strong>계정</strong> 매핑 규칙입니다. 한 번 등록하면 같은 거래상대의 모든 거래가 자동 분류됩니다.</p>
+
+              <h4>3. WHT Flag (원천세 플래그)</h4>
+              <p>한국 거주자에게 송금 시 원천세 검토가 필요할 수 있습니다. 해당 거래는 빨간색으로 경고 표시됩니다.</p>
+
+              <h3>사용 방법</h3>
+
+              <h4>Step 1: 일괄 분류 실행</h4>
+              <ol>
+                <li><strong>"일괄 분류 실행"</strong> 버튼 클릭</li>
+                <li>등록된 룰에 매칭되는 거래가 자동 분류됩니다</li>
+                <li>요약 카드에서 분류 현황을 확인합니다</li>
+              </ol>
+
+              <h4>Step 2: 미분류 거래 처리</h4>
+              <ol>
+                <li>미분류 거래의 <strong>드롭다운</strong>에서 계정을 선택</li>
+                <li>자동으로 해당 거래상대가 룰로 저장됩니다</li>
+                <li>다음부터 같은 거래상대는 자동 분류</li>
+              </ol>
+
+              <h4>Step 3: 룰 관리</h4>
+              <p>"룰 관리" 버튼으로 등록된 모든 룰을 확인/수정할 수 있습니다.</p>
+
+              <h4>Step 4: FY(회계연도) 필터</h4>
+              <ul>
+                <li>FY24: 2023년 3월 ~ 2024년 2월</li>
+                <li>FY25: 2024년 3월 ~ 2025년 2월</li>
+                <li>FY26: 2025년 3월 ~ 2026년 2월</li>
+              </ul>
+
+              <h3>분류 정확도</h3>
+              <table>
+                <thead><tr><th>시점</th><th>예상 자동 분류율</th><th>소요 시간</th></tr></thead>
+                <tbody>
+                  <tr><td>최초 실행</td><td>~70%</td><td>미분류 수동 처리 1-2시간</td></tr>
+                  <tr><td>2번째 FY</td><td>~90%</td><td>신규 거래상대만 처리 20분</td></tr>
+                  <tr><td>3번째 FY 이후</td><td>~95%+</td><td>5분</td></tr>
+                </tbody>
+              </table>
+
+              <h3>FAQ</h3>
+              <p><strong>Q: 분류를 잘못했으면?</strong><br/>A: 룰 관리에서 룰을 수정/삭제할 수 있습니다.</p>
+              <p><strong>Q: 같은 거래상대가 다른 계정에 해당하면?</strong><br/>A: 현재는 하나의 거래상대에 하나의 계정만 매핑됩니다. 예외적인 거래는 수동으로 분류해주세요.</p>
+              <p><strong>Q: 내부 이체도 분류되나?</strong><br/>A: "Internal transfer"로 분류됩니다. 회계상 자산 이동이므로 PL에는 영향 없습니다.</p>
+              <p><strong>Q: WHT 플래그는 실제 세금 계산인가?</strong><br/>A: 아닙니다. 한국 거주자 송금에 대한 <strong>검토 알림</strong>입니다. 실제 원천세 계산은 세무사와 확인이 필요합니다.</p>
+            </div>
+          </div>
         </div>
       )}
     </div>

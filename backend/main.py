@@ -165,6 +165,26 @@ async def delete_candidate(candidate_id: int):
     await db.close()
     return {"message": "Deleted"}
 
+@app.put("/api/candidates/{candidate_id}/status")
+async def update_candidate_status(candidate_id: int, data: dict):
+    """Update candidate status (submitted/analyzed/hired/rejected)."""
+    db = await get_db()
+    await db.execute("UPDATE candidates SET status=? WHERE id=?", (data["status"], candidate_id))
+    await db.commit()
+    await db.close()
+    return {"message": f"Status → {data['status']}"}
+
+@app.put("/api/candidates/{candidate_id}/reward")
+async def update_candidate_reward(candidate_id: int, data: dict):
+    """Record TON reward payment."""
+    db = await get_db()
+    await db.execute(
+        "UPDATE candidates SET reward_amount=?, reward_token=?, reward_tx=?, reward_date=? WHERE id=?",
+        (data.get("amount", 0), data.get("token", "TON"), data.get("tx_hash", ""), data.get("date", ""), candidate_id))
+    await db.commit()
+    await db.close()
+    return {"message": "Reward recorded"}
+
 @app.get("/api/candidates/{candidate_id}")
 async def get_candidate(candidate_id: int):
     db = await get_db()

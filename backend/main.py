@@ -145,7 +145,7 @@ async def analyze_candidate(candidate_id: int, request: Request):
 async def list_candidates():
     db = await get_db()
     rows = await db.execute(
-        "SELECT id, name, email, repo_url, status, scores, recommendation, weighted_score, reviewed_by, analyzed_by, created_at FROM candidates ORDER BY created_at DESC"
+        "SELECT id, name, email, repo_url, status, scores, recommendation, weighted_score, reviewed_by, analyzed_by, created_at, reward_amount, reward_token, reward_tx, reward_date FROM candidates ORDER BY created_at DESC"
     )
     candidates = []
     for r in await rows.fetchall():

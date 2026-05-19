@@ -31,6 +31,7 @@ const sections = [
     title: "회계",
     items: [
       { href: "/accounting/classifier", label: "거래 분류", icon: "🏷️" },
+      { href: "/accounting/invoices", label: "인보이스", icon: "📄" },
     ],
   },
 ];

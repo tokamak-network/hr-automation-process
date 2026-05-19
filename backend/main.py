@@ -3031,6 +3031,123 @@ async def classification_summary(year: Optional[int] = None):
     }
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Accounting — WHT Review
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.put("/api/accounting/wht/{tx_id}")
+async def update_wht_status(tx_id: int, data: dict):
+    """Update WHT review status for a transaction."""
+    db = await get_db()
+    await db.execute(
+        "UPDATE fiat_transactions SET wht_status=?, wht_note=?, wht_reviewed_at=datetime('now') WHERE id=?",
+        (data["status"], data.get("note", ""), tx_id))
+    await db.commit()
+    await db.close()
+    return {"message": "WHT status updated"}
+
+@app.get("/api/accounting/wht")
+async def list_wht_transactions():
+    """List all WHT-flagged transactions with review status."""
+    db = await get_db()
+    rows = await db.execute("""
+        SELECT ft.id, ft.counterparty, ft.amount, ft.currency, ft.direction, ft.tx_date,
+               ft.account_code, ft.wht_status, ft.wht_note, ft.wht_reviewed_at,
+               cr.residence, cr.note as rule_note
+        FROM fiat_transactions ft
+        JOIN counterparty_rules cr ON LOWER(ft.counterparty) LIKE '%%' || LOWER(cr.pattern) || '%%'
+        WHERE cr.wht_flag = 1
+        ORDER BY ft.tx_date DESC
+    """)
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Accounting — Invoice Management
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/accounting/invoices")
+async def list_invoices(type: str = "", year: Optional[int] = None):
+    """List invoices. type: 'receivable' (AR) or 'payable' (AP)."""
+    db = await get_db()
+    conditions, params = [], []
+    if type:
+        conditions.append("type=?")
+        params.append(type)
+    if year:
+        conditions.append("(issue_date >= ? AND issue_date <= ?)")
+        fy_start = f"{year - 1}-03-01"
+        fy_end = f"{year}-02-28"
+        params.extend([fy_start, fy_end])
+    where = " WHERE " + " AND ".join(conditions) if conditions else ""
+    rows = await db.execute(f"SELECT * FROM invoices{where} ORDER BY issue_date DESC", tuple(params))
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+@app.post("/api/accounting/invoices")
+async def create_invoice(data: dict):
+    db = await get_db()
+    cursor = await db.execute(
+        "INSERT INTO invoices (type, invoice_no, counterparty, description, amount, currency, issue_date, due_date, paid_date, status, fx_rate, sgd_amount, fiat_tx_id, note, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
+        (data["type"], data.get("invoice_no", ""), data["counterparty"], data.get("description", ""),
+         data["amount"], data.get("currency", "USD"), data.get("issue_date", ""), data.get("due_date", ""),
+         data.get("paid_date", ""), data.get("status", "pending"), data.get("fx_rate", 0),
+         data.get("sgd_amount", 0), data.get("fiat_tx_id"), data.get("note", "")))
+    await db.commit()
+    await db.close()
+    return {"message": "Invoice created"}
+
+@app.put("/api/accounting/invoices/{invoice_id}")
+async def update_invoice(invoice_id: int, data: dict):
+    db = await get_db()
+    fields = ["invoice_no", "counterparty", "description", "amount", "currency", "issue_date",
+              "due_date", "paid_date", "status", "fx_rate", "sgd_amount", "fiat_tx_id", "note"]
+    updates = {k: data[k] for k in fields if k in data}
+    if updates:
+        set_clause = ", ".join(f"{k}=?" for k in updates)
+        await db.execute(f"UPDATE invoices SET {set_clause} WHERE id=?", tuple(list(updates.values()) + [invoice_id]))
+        await db.commit()
+    await db.close()
+    return {"message": "Updated"}
+
+@app.delete("/api/accounting/invoices/{invoice_id}")
+async def delete_invoice(invoice_id: int):
+    db = await get_db()
+    await db.execute("DELETE FROM invoices WHERE id=?", (invoice_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deleted"}
+
+@app.get("/api/accounting/invoices/summary")
+async def invoice_summary(year: Optional[int] = None):
+    """AR/AP summary."""
+    db = await get_db()
+    conditions = []
+    params = []
+    if year:
+        conditions.append("issue_date >= ? AND issue_date <= ?")
+        params.extend([f"{year-1}-03-01", f"{year}-02-28"])
+    where = " WHERE " + " AND ".join(conditions) if conditions else ""
+
+    ar = await db.execute(f"SELECT COUNT(*) as cnt, COALESCE(SUM(amount),0) as total FROM invoices{where}{' AND' if where else ' WHERE'} type='receivable'", tuple(params))
+    ar_row = await ar.fetchone()
+    ap = await db.execute(f"SELECT COUNT(*) as cnt, COALESCE(SUM(amount),0) as total FROM invoices{where}{' AND' if where else ' WHERE'} type='payable'", tuple(params))
+    ap_row = await ap.fetchone()
+
+    unpaid_ar = await db.execute(f"SELECT COUNT(*) as cnt, COALESCE(SUM(amount),0) as total FROM invoices{where}{' AND' if where else ' WHERE'} type='receivable' AND status != 'paid'", tuple(params))
+    unpaid_ar_row = await unpaid_ar.fetchone()
+
+    await db.close()
+    return {
+        "receivable": {"count": ar_row["cnt"], "total": ar_row["total"]},
+        "payable": {"count": ap_row["cnt"], "total": ap_row["total"]},
+        "outstanding_ar": {"count": unpaid_ar_row["cnt"], "total": unpaid_ar_row["total"]},
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     import argparse

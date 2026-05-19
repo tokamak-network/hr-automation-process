@@ -105,14 +105,35 @@ export default function ClassifierPage() {
         </div>
       )}
 
-      {/* WHT 경고 */}
+      {/* WHT 경고 + 리뷰 */}
       {summary?.wht_flagged?.length > 0 && (
         <div className="rounded-xl p-4 mb-6 bg-red-50 border border-red-200">
-          <h3 className="text-sm font-semibold text-red-700 mb-2">원천세 검토 필요 ({summary.wht_flagged.length}건)</h3>
-          <div className="space-y-1">
-            {summary.wht_flagged.slice(0, 5).map((tx: any, i: number) => (
-              <div key={i} className="text-xs text-red-600">
-                {tx.tx_date?.slice(0, 10)} · {tx.counterparty} · {fmt(tx.amount)} {tx.currency} · {tx.residence}
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-red-700">원천세 검토 필요 ({summary.wht_flagged.length}건)</h3>
+          </div>
+          <div className="space-y-2">
+            {summary.wht_flagged.slice(0, 10).map((tx: any, i: number) => (
+              <div key={i} className="flex items-center gap-3 text-xs">
+                <span className="text-gray-500 w-[70px]">{tx.tx_date?.slice(0, 10)}</span>
+                <span className="text-gray-700 w-[180px] truncate">{tx.counterparty}</span>
+                <span className="font-semibold w-[100px] text-right">{fmt(tx.amount)} {tx.currency}</span>
+                <span className="text-gray-400 w-[60px]">{tx.residence}</span>
+                <select defaultValue={tx.wht_status || "pending"} onChange={async (e) => {
+                  const note = e.target.value === "exempt" ? prompt("면제 근거를 입력하세요 (예: DTA Art.7, 한국 수행, PE 없음)") || "" : "";
+                  await fetch(`/api/accounting/wht/${tx.id}`, {
+                    method: "PUT", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status: e.target.value, note }),
+                  });
+                  await loadSummary();
+                }} className={`text-[10px] px-2 py-0.5 rounded border-0 cursor-pointer ${
+                  tx.wht_status === "exempt" ? "bg-emerald-100 text-emerald-700" :
+                  tx.wht_status === "taxable" ? "bg-red-100 text-red-700" :
+                  "bg-amber-100 text-amber-700"}`}>
+                  <option value="pending">검토중</option>
+                  <option value="exempt">면제</option>
+                  <option value="taxable">과세</option>
+                </select>
+                {tx.wht_note && <span className="text-gray-400 truncate" title={tx.wht_note}>{tx.wht_note}</span>}
               </div>
             ))}
           </div>

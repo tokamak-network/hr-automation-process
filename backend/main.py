@@ -3121,6 +3121,55 @@ async def delete_invoice(invoice_id: int):
     await db.close()
     return {"message": "Deleted"}
 
+@app.post("/api/accounting/invoices/upload")
+async def upload_invoice_file(
+    file: UploadFile = File(...),
+    type: str = Form("receivable"),
+    counterparty: str = Form(""),
+    invoice_no: str = Form(""),
+    description: str = Form(""),
+    amount: float = Form(0),
+    currency: str = Form("USD"),
+    issue_date: str = Form(""),
+    due_date: str = Form(""),
+    status: str = Form("pending"),
+    note: str = Form(""),
+):
+    """Upload invoice PDF and create record."""
+    import uuid
+    upload_dir = os.path.join(os.path.dirname(__file__), "uploads", "invoices")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Save file
+    ext = os.path.splitext(file.filename or "file")[1] or ".pdf"
+    filename = f"{uuid.uuid4().hex[:12]}{ext}"
+    filepath = os.path.join(upload_dir, filename)
+    content = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    file_url = f"/api/accounting/invoices/file/{filename}"
+
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO invoices (type, invoice_no, counterparty, description, amount, currency, issue_date, due_date, status, file_url, note, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
+        (type, invoice_no, counterparty, description, amount, currency, issue_date, due_date, status, file_url, note))
+    await db.commit()
+    await db.close()
+
+    return {"message": f"Invoice uploaded: {file.filename}", "file_url": file_url}
+
+
+@app.get("/api/accounting/invoices/file/{filename}")
+async def get_invoice_file(filename: str):
+    """Serve uploaded invoice file."""
+    from fastapi.responses import FileResponse
+    filepath = os.path.join(os.path.dirname(__file__), "uploads", "invoices", filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(404, "File not found")
+    return FileResponse(filepath, media_type="application/pdf", headers={"Content-Disposition": f"inline; filename={filename}"})
+
+
 @app.get("/api/accounting/invoices/summary")
 async def invoice_summary(year: Optional[int] = None):
     """AR/AP summary."""

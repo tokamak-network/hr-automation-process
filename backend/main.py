@@ -145,7 +145,7 @@ async def analyze_candidate(candidate_id: int, request: Request):
 async def list_candidates():
     db = await get_db()
     rows = await db.execute(
-        "SELECT id, name, email, repo_url, status, scores, recommendation, weighted_score, reviewed_by, analyzed_by, created_at, reward_amount, reward_token, reward_tx, reward_date FROM candidates ORDER BY created_at DESC"
+        "SELECT id, name, email, repo_url, status, scores, recommendation, weighted_score, reviewed_by, analyzed_by, created_at, reward_amount, reward_token, reward_tx, reward_date, reviewer, review_comment, result_shared FROM candidates ORDER BY created_at DESC"
     )
     candidates = []
     for r in await rows.fetchall():
@@ -184,6 +184,17 @@ async def update_candidate_reward(candidate_id: int, data: dict):
     await db.commit()
     await db.close()
     return {"message": "Reward recorded"}
+
+@app.put("/api/candidates/{candidate_id}/review")
+async def update_candidate_review(candidate_id: int, data: dict):
+    """Update reviewer and comment."""
+    db = await get_db()
+    await db.execute(
+        "UPDATE candidates SET reviewer=?, review_comment=?, result_shared=? WHERE id=?",
+        (data.get("reviewer", ""), data.get("comment", ""), data.get("result_shared", 0), candidate_id))
+    await db.commit()
+    await db.close()
+    return {"message": "Review updated"}
 
 @app.get("/api/candidates/{candidate_id}")
 async def get_candidate(candidate_id: int):

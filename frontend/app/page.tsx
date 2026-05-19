@@ -7,6 +7,7 @@ interface Candidate {
   id: number; name: string; email: string; repo_url: string; status: string;
   scores: Record<string, number> | null; recommendation: string | null; created_at: string;
   reward_amount?: number; reward_token?: string; reward_tx?: string; reward_date?: string;
+  reviewer?: string; review_comment?: string; result_shared?: number;
 }
 
 const STATUS_OPTIONS = ["submitted", "analyzed", "hired", "rejected"];
@@ -79,6 +80,8 @@ export default function CandidatesPage() {
               <th className="py-3 px-4">Status</th>
               <th className="py-3 px-4">Avg Score</th>
               <th className="py-3 px-4">Recommendation</th>
+              <th className="py-3 px-4">Reviewer</th>
+              <th className="py-3 px-4">Comment</th>
               <th className="py-3 px-4">Reward</th>
               <th className="py-3 px-4">Actions</th>
               <th className="py-3 px-4 w-[50px]"></th>
@@ -96,6 +99,8 @@ export default function CandidatesPage() {
                   </td>
                   <td className="py-3 px-4">{avgScore(c.scores)}</td>
                   <td className={`py-3 px-4 font-medium ${recColor[c.recommendation || ""] || ""}`}>{c.recommendation || "-"}</td>
+                  <td className="py-3 px-4 text-xs text-gray-600">{c.reviewer || "-"}</td>
+                  <td className="py-3 px-4 text-xs text-gray-500 max-w-[200px] truncate" title={c.review_comment || ""}>{c.review_comment || "-"}</td>
                   <td className="py-3 px-4">
                     <button onClick={() => {
                       setRewardForm({

@@ -69,7 +69,7 @@ export default function CandidateDetail() {
       <a href="/" className="text-sm text-gray-400 hover:text-gray-700 transition">← Back</a>
       <div className="flex items-center gap-3 mt-2 mb-4">
         <h1 className="text-2xl font-bold text-gray-900">{candidate.name}</h1>
-        {candidate.status === "analyzed" && (
+        {candidate.status !== "submitted" && (
           <div className="flex gap-1">
             <a href={`${API}/api/candidates/${id}/report/download?format=md`}
               className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50">.md</a>
@@ -112,7 +112,7 @@ export default function CandidateDetail() {
       {candidate.weighted_score != null && (
         <div className="mb-6 mt-4 p-4 rounded-lg border border-blue-200 bg-blue-50">
           <span className="text-sm text-gray-500">Weighted Score (Track B): </span>
-          <span className="text-3xl font-bold ml-2 text-[#2A72E5]">{candidate.weighted_score}</span>
+          <span className="text-3xl font-bold ml-2 text-[#2A72E5]">{Number(candidate.weighted_score).toFixed(1)}</span>
           <span className="text-sm text-gray-400"> / 10</span>
         </div>
       )}

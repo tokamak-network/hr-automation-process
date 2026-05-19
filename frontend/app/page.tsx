@@ -97,18 +97,26 @@ export default function CandidatesPage() {
                   <td className="py-3 px-4">{avgScore(c.scores)}</td>
                   <td className={`py-3 px-4 font-medium ${recColor[c.recommendation || ""] || ""}`}>{c.recommendation || "-"}</td>
                   <td className="py-3 px-4">
-                    {c.reward_amount && c.reward_amount > 0 ? (
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs font-medium text-purple-600">{c.reward_amount} {c.reward_token}</span>
-                        {c.reward_tx && (
-                          <a href={`https://etherscan.io/tx/${c.reward_tx}`} target="_blank" rel="noopener noreferrer"
-                            className="text-[10px] text-blue-500 hover:underline">TX</a>
-                        )}
-                      </div>
-                    ) : (
-                      <button onClick={() => { setRewardForm({ amount: 0, token: "TON", tx_hash: "", date: "" }); setRewardModal(c); }}
-                        className="text-[10px] text-gray-400 hover:text-purple-600">+ 보상</button>
-                    )}
+                    <button onClick={() => {
+                      setRewardForm({
+                        amount: c.reward_amount || 0,
+                        token: c.reward_token || "TON",
+                        tx_hash: c.reward_tx || "",
+                        date: c.reward_date || "",
+                      });
+                      setRewardModal(c);
+                    }} className="text-left hover:opacity-70">
+                      {c.reward_amount && c.reward_amount > 0 ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs font-medium text-purple-600">{c.reward_amount} {c.reward_token}</span>
+                          {c.reward_tx && (
+                            <span className="text-[10px] text-blue-500">TX</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-gray-400">+ 보상</span>
+                      )}
+                    </button>
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex gap-2 items-center">

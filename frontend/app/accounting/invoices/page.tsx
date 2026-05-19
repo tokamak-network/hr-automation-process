@@ -12,6 +12,7 @@ export default function InvoicesPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<any>({ type: "receivable", invoice_no: "", counterparty: "", description: "", amount: 0, currency: "USD", issue_date: "", due_date: "", paid_date: "", status: "pending", fx_rate: 0, sgd_amount: 0, note: "" });
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const load = () => {
     fetch(`/api/accounting/invoices?type=${tab}`).then(r => r.json()).then(setInvoices);
@@ -49,10 +50,34 @@ export default function InvoicesPage() {
           <h1 className="text-2xl font-bold">인보이스</h1>
           <p className="text-sm text-gray-400">매출(AR) / 매입(AP) 인보이스 관리</p>
         </div>
-        <button onClick={() => { setForm({ type: tab, invoice_no: "", counterparty: "", description: "", amount: 0, currency: "USD", issue_date: "", due_date: "", paid_date: "", status: "pending", fx_rate: 0, sgd_amount: 0, note: "" }); setEditingId(null); setShowForm(true); }}
-          className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC]">
-          + 인보이스 추가
-        </button>
+        <div className="flex gap-2">
+          <label className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC] cursor-pointer">
+            {uploading ? "업로드 중..." : "PDF 업로드"}
+            <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={async (e) => {
+              const file = e.target.files?.[0]; if (!file) return;
+              setUploading(true);
+              const fd = new FormData();
+              fd.append("file", file);
+              fd.append("type", tab);
+              // Extract info from filename if possible
+              const name = file.name.replace(/\.[^.]+$/, "");
+              fd.append("description", name);
+              fd.append("status", "pending");
+              try {
+                const res = await fetch("/api/accounting/invoices/upload", { method: "POST", body: fd });
+                const data = await res.json();
+                alert(data.message);
+                await load();
+              } catch { alert("업로드 실패"); }
+              setUploading(false);
+              e.target.value = "";
+            }} className="hidden" disabled={uploading} />
+          </label>
+          <button onClick={() => { setForm({ type: tab, invoice_no: "", counterparty: "", description: "", amount: 0, currency: "USD", issue_date: "", due_date: "", paid_date: "", status: "pending", fx_rate: 0, sgd_amount: 0, note: "" }); setEditingId(null); setShowForm(true); }}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">
+            + 수동 입력
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -97,6 +122,7 @@ export default function InvoicesPage() {
               <th className="text-right p-3 text-gray-400">금액</th>
               <th className="text-left p-3 text-gray-400">발행일</th>
               <th className="text-left p-3 text-gray-400">입금/지급일</th>
+              <th className="text-center p-3 text-gray-400">파일</th>
               <th className="text-center p-3 text-gray-400">상태</th>
               <th className="text-right p-3 text-gray-400"></th>
             </tr>
@@ -111,6 +137,12 @@ export default function InvoicesPage() {
                 <td className="p-3 text-xs text-gray-500">{inv.issue_date || "-"}</td>
                 <td className="p-3 text-xs text-gray-500">{inv.paid_date || "-"}</td>
                 <td className="text-center p-3">
+                  {inv.file_url ? (
+                    <a href={inv.file_url} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-blue-500 hover:underline">PDF</a>
+                  ) : <span className="text-xs text-gray-300">-</span>}
+                </td>
+                <td className="text-center p-3">
                   <span className={`text-xs px-2 py-0.5 rounded ${inv.status === "paid" ? "bg-emerald-100 text-emerald-700" : inv.status === "overdue" ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>
                     {inv.status === "paid" ? "입금완료" : inv.status === "overdue" ? "연체" : "대기"}
                   </span>
@@ -122,7 +154,7 @@ export default function InvoicesPage() {
               </tr>
             ))}
             {invoices.length === 0 && (
-              <tr><td colSpan={8} className="py-8 text-center text-gray-400">{tab === "receivable" ? "매출" : "매입"} 인보이스가 없습니다</td></tr>
+              <tr><td colSpan={9} className="py-8 text-center text-gray-400">{tab === "receivable" ? "매출" : "매입"} 인보이스가 없습니다</td></tr>
             )}
           </tbody>
         </table>

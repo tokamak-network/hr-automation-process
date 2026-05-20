@@ -13,6 +13,7 @@ export default function InvoicesPage() {
   const [form, setForm] = useState<any>({ type: "receivable", invoice_no: "", counterparty: "", description: "", amount: 0, currency: "USD", issue_date: "", due_date: "", paid_date: "", status: "pending", fx_rate: 0, sgd_amount: 0, note: "" });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState("");
 
   const load = () => {
     fetch(`/api/accounting/invoices?type=${tab}`).then(r => r.json()).then(setInvoices);
@@ -52,24 +53,27 @@ export default function InvoicesPage() {
         </div>
         <div className="flex gap-2">
           <label className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#2A72E5] hover:bg-[#1E5FCC] cursor-pointer">
-            {uploading ? "업로드 중..." : "PDF 업로드"}
-            <input type="file" accept=".pdf,.png,.jpg,.jpeg" onChange={async (e) => {
-              const file = e.target.files?.[0]; if (!file) return;
+            {uploading ? uploadProgress : "PDF 업로드"}
+            <input type="file" accept=".pdf,.png,.jpg,.jpeg" multiple onChange={async (e) => {
+              const files = Array.from(e.target.files || []);
+              if (files.length === 0) return;
               setUploading(true);
-              const fd = new FormData();
-              fd.append("file", file);
-              fd.append("type", tab);
-              // Extract info from filename if possible
-              const name = file.name.replace(/\.[^.]+$/, "");
-              fd.append("description", name);
-              fd.append("status", "pending");
-              try {
-                const res = await fetch("/api/accounting/invoices/upload", { method: "POST", body: fd });
-                const data = await res.json();
-                alert(data.message);
-                await load();
-              } catch { alert("업로드 실패"); }
+              let done = 0;
+              for (const file of files) {
+                setUploadProgress(`AI 분석 중... (${done + 1}/${files.length})`);
+                const fd = new FormData();
+                fd.append("file", file);
+                fd.append("type", tab);
+                fd.append("status", "pending");
+                try {
+                  await fetch("/api/accounting/invoices/upload", { method: "POST", body: fd });
+                } catch { /* continue */ }
+                done++;
+              }
+              setUploadProgress("");
               setUploading(false);
+              await load();
+              alert(`${done}건 업로드 완료`);
               e.target.value = "";
             }} className="hidden" disabled={uploading} />
           </label>

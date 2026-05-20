@@ -3121,6 +3121,60 @@ async def delete_invoice(invoice_id: int):
     await db.close()
     return {"message": "Deleted"}
 
+async def _extract_invoice_from_pdf(filepath: str) -> dict:
+    """Extract text from PDF and use AI to parse invoice fields."""
+    import pdfplumber
+    import httpx
+
+    # 1. Extract text from PDF
+    text = ""
+    try:
+        with pdfplumber.open(filepath) as pdf:
+            for page in pdf.pages[:5]:  # max 5 pages
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+    except Exception:
+        return {}
+
+    if not text.strip():
+        return {}
+
+    # 2. AI parsing
+    api_url = os.getenv("TOKAMAK_API_URL", os.getenv("AI_API_URL", "https://api.openai.com/v1/chat/completions"))
+    api_key = os.getenv("TOKAMAK_API_KEY", os.getenv("AI_API_KEY", ""))
+    model = os.getenv("TOKAMAK_MODEL", os.getenv("AI_MODEL", "gpt-4o-mini"))
+
+    # Ensure URL ends with /chat/completions
+    if api_url and not api_url.endswith("/chat/completions"):
+        api_url = api_url.rstrip("/") + "/v1/chat/completions"
+
+    if not api_key:
+        return {}
+
+    prompt = f'Extract from this invoice. Return ONLY JSON: {{"invoice_no":"","counterparty":"","description":"","amount":0,"currency":"","issue_date":"YYYY-MM-DD","due_date":"YYYY-MM-DD","type":"receivable or payable"}}. Text: {text[:3000]}'
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(api_url, headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }, json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+            })
+            data = resp.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            # Extract JSON from response
+            import re as _re
+            json_match = _re.search(r'\{[^{}]*\}', content, _re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+    except Exception:
+        pass
+    return {}
+
+
 @app.post("/api/accounting/invoices/upload")
 async def upload_invoice_file(
     file: UploadFile = File(...),
@@ -3135,7 +3189,7 @@ async def upload_invoice_file(
     status: str = Form("pending"),
     note: str = Form(""),
 ):
-    """Upload invoice PDF and create record."""
+    """Upload invoice PDF, extract data with AI, and create record."""
     import uuid
     upload_dir = os.path.join(os.path.dirname(__file__), "uploads", "invoices")
     os.makedirs(upload_dir, exist_ok=True)
@@ -3150,14 +3204,43 @@ async def upload_invoice_file(
 
     file_url = f"/api/accounting/invoices/file/{filename}"
 
+    # AI extraction from PDF
+    extracted = {}
+    if ext.lower() == ".pdf":
+        extracted = await _extract_invoice_from_pdf(filepath)
+
+    # Use extracted values as defaults, override with form values if provided
+    ext_type = extracted.get("type", "")
+    final_type = ext_type if ext_type in ("receivable", "payable") else type
+    final_invoice_no = invoice_no or extracted.get("invoice_no", "")
+    final_counterparty = counterparty or extracted.get("counterparty", "")
+    final_description = extracted.get("description", "") or description
+    final_amount = amount if amount > 0 else float(extracted.get("amount", 0) or 0)
+    final_currency = currency if currency != "USD" else extracted.get("currency", currency)
+    final_issue_date = issue_date or extracted.get("issue_date", "")
+    final_due_date = due_date or extracted.get("due_date", "")
+
     db = await get_db()
     await db.execute(
         "INSERT INTO invoices (type, invoice_no, counterparty, description, amount, currency, issue_date, due_date, status, file_url, note, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
-        (type, invoice_no, counterparty, description, amount, currency, issue_date, due_date, status, file_url, note))
+        (final_type, final_invoice_no, final_counterparty, final_description, final_amount, final_currency, final_issue_date, final_due_date, status, file_url, note))
     await db.commit()
     await db.close()
 
-    return {"message": f"Invoice uploaded: {file.filename}", "file_url": file_url}
+    return {
+        "message": f"Invoice uploaded: {file.filename}",
+        "file_url": file_url,
+        "extracted": extracted,
+        "applied": {
+            "invoice_no": final_invoice_no,
+            "counterparty": final_counterparty,
+            "amount": final_amount,
+            "currency": final_currency,
+            "issue_date": final_issue_date,
+            "due_date": final_due_date,
+            "description": final_description,
+        }
+    }
 
 
 @app.get("/api/accounting/invoices/file/{filename}")
@@ -3195,6 +3278,124 @@ async def invoice_summary(year: Optional[int] = None):
         "payable": {"count": ap_row["cnt"], "total": ap_row["total"]},
         "outstanding_ar": {"count": unpaid_ar_row["cnt"], "total": unpaid_ar_row["total"]},
     }
+
+
+# ── Accounting Documents (문서 저장소) ──────────────────────────────
+
+@app.get("/api/accounting/documents")
+async def list_accounting_documents(ya: Optional[int] = None, category: Optional[str] = None):
+    """List accounting documents, optionally filtered by YA and category."""
+    db = await get_db()
+    conditions = []
+    params = []
+    if ya:
+        conditions.append("ya = ?")
+        params.append(ya)
+    if category:
+        conditions.append("category = ?")
+        params.append(category)
+    where = " WHERE " + " AND ".join(conditions) if conditions else ""
+    rows = await db.execute(f"SELECT * FROM accounting_documents{where} ORDER BY ya DESC, category, subcategory", tuple(params))
+    docs = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return docs
+
+
+@app.get("/api/accounting/documents/years")
+async def list_accounting_years():
+    """Get list of available YAs."""
+    db = await get_db()
+    rows = await db.execute("SELECT DISTINCT ya FROM accounting_documents ORDER BY ya DESC")
+    years = [r["ya"] for r in await rows.fetchall()]
+    await db.close()
+    return years
+
+
+@app.post("/api/accounting/documents")
+async def upload_accounting_document(
+    file: UploadFile = File(...),
+    ya: int = Form(...),
+    category: str = Form(...),
+    subcategory: str = Form(""),
+    description: str = Form(""),
+    note: str = Form(""),
+):
+    """Upload an accounting document (PDF/image)."""
+    upload_dir = os.path.join(os.path.dirname(__file__), "uploads", "accounting")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    ext = os.path.splitext(file.filename or "doc")[1]
+    safe_name = f"YA{ya}_{category}_{subcategory}_{datetime.now().strftime('%Y%m%d%H%M%S')}{ext}".replace(" ", "_")
+    filepath = os.path.join(upload_dir, safe_name)
+
+    content = await file.read()
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    file_url = f"/api/accounting/documents/file/{safe_name}"
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO accounting_documents (ya, category, subcategory, filename, file_url, description, uploaded_at, note) VALUES (?,?,?,?,?,?,datetime('now'),?)",
+        (ya, category, subcategory, file.filename or safe_name, file_url, description, note))
+    await db.commit()
+    await db.close()
+    return {"message": f"Document uploaded: {file.filename}", "file_url": file_url}
+
+
+@app.delete("/api/accounting/documents/{doc_id}")
+async def delete_accounting_document(doc_id: int):
+    """Delete an accounting document."""
+    db = await get_db()
+    row = await db.execute("SELECT file_url FROM accounting_documents WHERE id = ?", (doc_id,))
+    doc = await row.fetchone()
+    if not doc:
+        await db.close()
+        raise HTTPException(404, "Document not found")
+
+    # Delete file from disk
+    filename = doc["file_url"].split("/")[-1] if doc["file_url"] else None
+    if filename:
+        filepath = os.path.join(os.path.dirname(__file__), "uploads", "accounting", filename)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+    await db.execute("DELETE FROM accounting_documents WHERE id = ?", (doc_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deleted"}
+
+
+@app.put("/api/accounting/documents/{doc_id}")
+async def update_accounting_document(doc_id: int, request: Request):
+    """Update document metadata (description, note, category, subcategory)."""
+    body = await request.json()
+    db = await get_db()
+    fields = []
+    params = []
+    for key in ["ya", "category", "subcategory", "description", "note"]:
+        if key in body:
+            fields.append(f"{key} = ?")
+            params.append(body[key])
+    if not fields:
+        await db.close()
+        return {"message": "Nothing to update"}
+    params.append(doc_id)
+    await db.execute(f"UPDATE accounting_documents SET {', '.join(fields)} WHERE id = ?", tuple(params))
+    await db.commit()
+    await db.close()
+    return {"message": "Updated"}
+
+
+@app.get("/api/accounting/documents/file/{filename}")
+async def get_accounting_document_file(filename: str):
+    """Serve uploaded accounting document file."""
+    from fastapi.responses import FileResponse
+    filepath = os.path.join(os.path.dirname(__file__), "uploads", "accounting", filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(404, "File not found")
+    ext = os.path.splitext(filename)[1].lower()
+    media = "application/pdf" if ext == ".pdf" else "image/png" if ext == ".png" else "image/jpeg" if ext in (".jpg", ".jpeg") else "application/octet-stream"
+    return FileResponse(filepath, media_type=media, headers={"Content-Disposition": f"inline; filename={filename}"})
 
 
 if __name__ == "__main__":

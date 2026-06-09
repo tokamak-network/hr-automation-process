@@ -234,6 +234,48 @@ export default function CandidateDetail() {
         </div>
       )}
 
+      {candidate.repo_analysis?.benchmark_comparison && (
+        <div className="mb-6 rounded-lg p-6 border border-gray-200 bg-white">
+          <h2 className="font-semibold mb-3 text-gray-900">Tokamak Org Benchmark Comparison</h2>
+          {(() => {
+            const bc = candidate.repo_analysis.benchmark_comparison;
+            const levelColor: Record<string, string> = {
+              above: "text-green-700 bg-green-100",
+              on_par: "text-yellow-700 bg-yellow-100",
+              below: "text-red-700 bg-red-100",
+            };
+            const levelLabel: Record<string, string> = { above: "Above", on_par: "On Par", below: "Below" };
+            const dims = [
+              { key: "file_count_vs_avg", label: "File Count" },
+              { key: "commit_count_vs_avg", label: "Commit Count" },
+              { key: "test_coverage_vs_avg", label: "Test Coverage" },
+              { key: "code_quality_vs_org", label: "Code Quality" },
+            ];
+            return (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-sm text-gray-500">Overall vs Tokamak Org:</span>
+                  <span className={`px-3 py-1 rounded-full text-sm font-bold ${levelColor[bc.overall_level] || "text-gray-400 bg-gray-100"}`}>
+                    {levelLabel[bc.overall_level] || bc.overall_level}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  {dims.map(d => (
+                    <div key={d.key} className="text-center rounded-lg p-3 border border-gray-100 bg-gray-50">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${levelColor[bc[d.key]] || "text-gray-400 bg-gray-100"}`}>
+                        {levelLabel[bc[d.key]] || bc[d.key] || "-"}
+                      </span>
+                      <div className="text-xs mt-1.5 text-gray-400">{d.label}</div>
+                    </div>
+                  ))}
+                </div>
+                {bc.summary && <p className="text-sm text-gray-500">{bc.summary}</p>}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
       {candidate.recommendation && (
         <div className="mb-6 p-4 rounded-lg border border-gray-200 bg-white">
           <span className="text-sm text-gray-400">Recommendation: </span>

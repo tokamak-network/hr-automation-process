@@ -24,12 +24,13 @@ export default function Payroll() {
   const [pForm, setPForm] = useState({ usdt_amount: 0, krw_rate: 0, krw_amount: 0, tax_simulated: 0, net_pay_krw: 0, tx_hash: "", status: "estimated" });
   const [pSaving, setPSaving] = useState(false);
   const [addrMap, setAddrMap] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const loadPayrolls = () => fetch(`/api/hr/payroll?year=${year}&month=${month}`).then(r => r.json()).then(setPayrolls).catch(() => {});
   const loadTx = () => fetch("/api/hr/transactions").then(r => r.json()).then(setTransactions).catch(() => {});
   const resolveAddr = (addr: string) => addrMap[addr?.toLowerCase()] || (addr ? `${addr.slice(0,8)}...` : "?");
 
-  useEffect(() => { loadPayrolls(); }, [year, month]);
+  useEffect(() => { loadPayrolls(); setSelected(new Set()); }, [year, month]);
   useEffect(() => {
     loadTx();
     fetch("/api/hr/transactions/sync-status").then(r => r.json()).then(setSyncStatus).catch(() => {});
@@ -74,7 +75,35 @@ export default function Payroll() {
   const handlePayrollDelete = async (id: number) => {
     if (!confirm("이 급여 데이터를 삭제하시겠습니까?")) return;
     await fetch(`/api/hr/payroll/${id}`, { method: "DELETE" });
+    setSelected(prev => { const s = new Set(prev); s.delete(id); return s; });
     await loadPayrolls();
+  };
+
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`선택한 ${selected.size}건의 급여 데이터를 삭제하시겠습니까?`)) return;
+    await fetch("/api/hr/payroll/bulk-delete", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: Array.from(selected) }),
+    });
+    setSelected(new Set());
+    await loadPayrolls();
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelected(prev => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === payrolls.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(payrolls.map((p: any) => p.id)));
+    }
   };
 
   const handleTxSave = async () => {
@@ -196,6 +225,18 @@ export default function Payroll() {
                     </button>
                   );
                 })}
+                <button onClick={async () => {
+                  if (!confirm(`${year}년 ${month}월 급여를 경비 포함하여 재계산하시겠습니까?`)) return;
+                  const res = await fetch("/api/hr/payroll/recalculate", {
+                    method: "POST", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ year, month }),
+                  });
+                  const data = await res.json();
+                  alert(data.message);
+                  await loadPayrolls();
+                }} className="text-xs px-2.5 py-1 rounded text-white bg-gray-500 hover:bg-gray-600">
+                  재계산
+                </button>
               </div>
             )}
           </div>
@@ -203,6 +244,10 @@ export default function Payroll() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50">
+                  <th className="p-3 w-8">
+                    <input type="checkbox" checked={payrolls.length > 0 && selected.size === payrolls.length}
+                      onChange={toggleSelectAll} className="rounded border-gray-300 accent-[#2A72E5]" />
+                  </th>
                   <th className="text-left p-3 text-gray-400">팀원</th>
                   <th className="text-right p-3 text-gray-400">Service Fee</th>
                   <th className="text-right p-3 text-gray-400">경비</th>
@@ -217,7 +262,11 @@ export default function Payroll() {
               </thead>
               <tbody>
                 {payrolls.map((p, i) => (
-                  <tr key={i} className="border-t border-gray-100">
+                  <tr key={i} className={`border-t border-gray-100 ${selected.has(p.id) ? "bg-blue-50/50" : ""}`}>
+                    <td className="p-3 w-8">
+                      <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)}
+                        className="rounded border-gray-300 accent-[#2A72E5]" />
+                    </td>
                     <td className="p-3">
                       <div className="font-medium">{p.name}</div>
                       <div className="text-xs text-gray-400">{p.role}</div>
@@ -269,19 +318,26 @@ export default function Payroll() {
                   </tr>
                 ))}
                 {payrolls.length === 0 && (
-                  <tr><td colSpan={9} className="py-8 text-center text-gray-400">해당 월의 급여 데이터가 없습니다</td></tr>
+                  <tr><td colSpan={11} className="py-8 text-center text-gray-400">해당 월의 급여 데이터가 없습니다</td></tr>
                 )}
               </tbody>
               {payrolls.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-gray-200 font-semibold">
+                    <td className="p-3"></td>
                     <td className="p-3">합계 ({payrolls.length}명)</td>
                     <td className="text-right p-3">{fmt(payrolls.reduce((s: number,p: any) => s + p.usdt_amount, 0))}</td>
                     <td className="text-right p-3 text-xs text-gray-500">{fmt(payrolls.reduce((s: number,p: any) => s + (p.expense_usdt || 0), 0))}</td>
                     <td className="text-right p-3 text-[#2A72E5]">{fmt(payrolls.reduce((s: number,p: any) => s + (p.total_usdt || p.usdt_amount), 0))}</td>
                     <td className="text-right p-3"></td>
-                    <td className="text-right p-3 text-amber-600">{"\u20A9"}{fmt(payrolls.reduce((s: number,p: any) => s + p.tax_simulated, 0))}</td>
-                    <td className="text-right p-3">{"\u20A9"}{fmt(payrolls.reduce((s: number,p: any) => s + p.net_pay_krw, 0))}</td>
+                    <td className="text-right p-3 text-amber-600">
+                      <div>{"\u20A9"}{fmt(payrolls.reduce((s: number,p: any) => s + p.tax_simulated, 0))}</div>
+                      {payrolls[0]?.krw_rate > 0 && <div className="text-xs text-gray-400 font-normal">${fmt(payrolls.reduce((s: number,p: any) => s + p.tax_simulated, 0) / payrolls[0].krw_rate)}</div>}
+                    </td>
+                    <td className="text-right p-3">
+                      <div>{"\u20A9"}{fmt(payrolls.reduce((s: number,p: any) => s + p.net_pay_krw, 0))}</div>
+                      {payrolls[0]?.krw_rate > 0 && <div className="text-xs text-gray-400 font-normal">${fmt(payrolls.reduce((s: number,p: any) => s + p.net_pay_krw, 0) / payrolls[0].krw_rate)}</div>}
+                    </td>
                     <td></td>
                     <td></td>
                   </tr>
@@ -289,6 +345,19 @@ export default function Payroll() {
               )}
             </table>
           </div>
+          {selected.size > 0 && (
+            <div className="mt-3 flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+              <span className="text-sm text-blue-700 font-medium">{selected.size}건 선택</span>
+              <button onClick={handleBulkDelete}
+                className="text-xs px-3 py-1.5 rounded-lg text-white bg-red-500 hover:bg-red-600 font-medium">
+                선택 삭제
+              </button>
+              <button onClick={() => setSelected(new Set())}
+                className="text-xs px-3 py-1.5 rounded-lg text-gray-600 border border-gray-300 hover:bg-white font-medium">
+                선택 해제
+              </button>
+            </div>
+          )}
         </div>
       )}
 

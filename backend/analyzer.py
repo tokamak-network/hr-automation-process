@@ -353,7 +353,43 @@ async def analyze_repo(repo_url: str) -> dict:
         }
 
 
-async def ai_analyze(repo_analysis: dict, description: str = "", demo_url: str = "") -> dict:
+def _build_benchmark_prompt_section(benchmark: dict = None) -> str:
+    """Build the benchmark comparison section for the AI prompt."""
+    if not benchmark:
+        return ""
+    repos = benchmark.get("repo_details", [])
+    repo_list = "\n".join(
+        f"  - {r['name']}: {r['file_count']} files, {r['commit_count']} commits, tests={'yes' if r['has_tests'] else 'no'}, langs={','.join(r['languages'][:3])}"
+        for r in repos[:10]
+    )
+    return f"""
+**Tokamak Network Org Benchmark (last 6 months):**
+Compare the candidate's repository against these metrics from {benchmark['repo_count']} active tokamak-network repos:
+- Avg files: {benchmark['avg_file_count']}, Avg commits: {benchmark['avg_commit_count']}, Avg size: {benchmark['avg_size_kb']}KB
+- Test coverage: {int(benchmark['test_ratio'] * 100)}% of repos have tests
+- Org languages: {json.dumps(benchmark.get('languages', {}))}
+Active repos:
+{repo_list}
+
+Use this benchmark to assess whether the candidate's work is ABOVE, ON PAR, or BELOW the quality level of Tokamak's own recent repositories.
+"""
+
+
+def _build_benchmark_fields(benchmark: dict = None) -> str:
+    """Build extra JSON fields for benchmark comparison."""
+    if not benchmark:
+        return ""
+    return """
+- "benchmark_comparison": object with:
+  - "overall_level": one of "above", "on_par", "below" (compared to Tokamak org average)
+  - "file_count_vs_avg": "above" / "on_par" / "below"
+  - "commit_count_vs_avg": "above" / "on_par" / "below"
+  - "test_coverage_vs_avg": "above" / "on_par" / "below"
+  - "code_quality_vs_org": "above" / "on_par" / "below"
+  - "summary": 1-2 sentence comparison summary (e.g. "This repo has more commits and better test coverage than the Tokamak org average, but fewer files.")"""
+
+
+async def ai_analyze(repo_analysis: dict, description: str = "", demo_url: str = "", benchmark: dict = None) -> dict:
     """Call AI to generate qualitative analysis and scores with Track B criteria."""
     api_url = os.getenv("TOKAMAK_API_URL", os.getenv("AI_API_URL", "https://api.openai.com/v1/chat/completions"))
     api_key = os.getenv("TOKAMAK_API_KEY", os.getenv("AI_API_KEY", ""))
@@ -394,7 +430,7 @@ README:
 
 Sample Code:
 {sample}
-
+{benchmark_section}
 Evaluate using these criteria:
 
 **5 Scoring Dimensions (1-10 each):**
@@ -444,7 +480,7 @@ Respond in JSON with these fields:
 - "scores": object with integer 1-10 for: "technical_completeness", "ecosystem_fit", "tokenomics_impact", "contribution_potential", "deliverable_completeness"
 - "track_b": object with "problem_definition", "implementation", "deliverable" (each "strong"/"adequate"/"weak") and "track_b_summary" (1-2 sentences)
 - "recommendation": one of "Strong Hire", "Hire", "Maybe", "Pass"
-- "report": Full evaluation report (3-5 paragraphs)
+- "report": Full evaluation report (3-5 paragraphs){benchmark_fields}
 
 Return ONLY valid JSON.""".format(
         description=description,
@@ -456,6 +492,8 @@ Return ONLY valid JSON.""".format(
         tests=repo_analysis.get('has_tests', False),
         readme=repo_analysis.get('readme_full', 'N/A')[:2000],
         sample=repo_analysis.get('sample_code', 'N/A')[:4000],
+        benchmark_section=_build_benchmark_prompt_section(benchmark),
+        benchmark_fields=_build_benchmark_fields(benchmark),
     )
 
     try:
@@ -526,6 +564,106 @@ def _fallback_scores(repo_analysis: dict) -> dict:
             fc, cc, ", ".join(langs.keys())
         ),
     }
+
+
+async def analyze_org_benchmark(org_name: str = "tokamak-network", months: int = 6, max_repos: int = 15) -> dict:
+    """Analyze recent active repos from a GitHub org to build a quality benchmark.
+
+    Returns a benchmark profile with average metrics across active repos.
+    """
+    from datetime import datetime, timedelta
+    import httpx
+
+    token = os.getenv("GITHUB_TOKEN", "")
+    if not token:
+        return {"error": "GITHUB_TOKEN not set"}
+
+    cutoff = (datetime.utcnow() - timedelta(days=months * 30)).isoformat() + "Z"
+    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+
+    # Fetch org repos sorted by recent push, filter by cutoff
+    repos_data = []
+    page = 1
+    async with httpx.AsyncClient(timeout=30) as client:
+        while len(repos_data) < max_repos:
+            resp = await client.get(
+                f"https://api.github.com/orgs/{org_name}/repos",
+                headers=headers,
+                params={"sort": "pushed", "direction": "desc", "per_page": 30, "page": page},
+            )
+            if resp.status_code != 200:
+                return {"error": f"GitHub API error: {resp.status_code}"}
+            batch = resp.json()
+            if not batch:
+                break
+            for r in batch:
+                if r.get("pushed_at", "") >= cutoff and not r.get("fork", False) and not r.get("archived", False):
+                    repos_data.append(r)
+            page += 1
+            if page > 3:
+                break
+
+    repos_data = repos_data[:max_repos]
+    if not repos_data:
+        return {"error": "No active repos found"}
+
+    # Analyze each repo
+    analyzed = []
+    for repo in repos_data:
+        clone_url = repo.get("clone_url", "")
+        if not clone_url:
+            continue
+        try:
+            result = await analyze_repo(clone_url)
+            if "error" not in result:
+                result["repo_name"] = repo["name"]
+                result["pushed_at"] = repo.get("pushed_at", "")
+                result["stars"] = repo.get("stargazers_count", 0)
+                result["description"] = repo.get("description", "")
+                analyzed.append(result)
+        except Exception as e:
+            print(f"Benchmark: failed to analyze {repo['name']}: {e}")
+            continue
+
+    if not analyzed:
+        return {"error": "No repos could be analyzed"}
+
+    # Aggregate metrics
+    total_files = [r["file_count"] for r in analyzed]
+    total_commits = [r["commit_count"] for r in analyzed]
+    total_size = [r["total_size_kb"] for r in analyzed]
+    test_count = sum(1 for r in analyzed if r["has_tests"])
+
+    # Aggregate language distribution
+    lang_counter = Counter()
+    for r in analyzed:
+        for lang, count in r.get("languages", {}).items():
+            lang_counter[lang] += count
+
+    repo_summaries = []
+    for r in analyzed:
+        repo_summaries.append({
+            "name": r["repo_name"],
+            "file_count": r["file_count"],
+            "commit_count": r["commit_count"],
+            "size_kb": r["total_size_kb"],
+            "has_tests": r["has_tests"],
+            "languages": list(r.get("languages", {}).keys())[:5],
+            "stars": r.get("stars", 0),
+            "description": r.get("description", ""),
+        })
+
+    benchmark = {
+        "org_name": org_name,
+        "repo_count": len(analyzed),
+        "avg_file_count": round(sum(total_files) / len(analyzed), 1),
+        "avg_commit_count": round(sum(total_commits) / len(analyzed), 1),
+        "avg_size_kb": round(sum(total_size) / len(analyzed), 1),
+        "test_ratio": round(test_count / len(analyzed), 2),
+        "languages": dict(lang_counter.most_common(10)),
+        "repo_details": repo_summaries,
+    }
+    return benchmark
 
 
 async def analyze_github_profile(g, username: str) -> dict:

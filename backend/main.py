@@ -15,7 +15,7 @@ load_dotenv()
 import sqlite3
 from db import init_db, get_db
 from database import DB_PATH
-from analyzer import analyze_repo, ai_analyze, analyze_github_profile, TEAM_MEMBERS, recommend_reviewers, calculate_weighted_score
+from analyzer import analyze_repo, ai_analyze, analyze_github_profile, TEAM_MEMBERS, recommend_reviewers, calculate_weighted_score, analyze_org_benchmark
 from team_profiler import scan_org_profiles
 from linkedin_google import search_linkedin_candidates, get_linkedin_candidates, update_candidate_status as update_linkedin_status, init_linkedin_db
 from github_linkedin import bridge_github_candidates
@@ -109,10 +109,21 @@ async def analyze_candidate(candidate_id: int, request: Request):
         demo_url = candidate["demo_url"] or ""
     except (KeyError, IndexError):
         pass
-    ai_result = await ai_analyze(repo_analysis, candidate["description"], demo_url)
+
+    # Fetch latest benchmark for comparison
+    benchmark_data = None
+    brow = await db.execute("SELECT * FROM org_benchmark ORDER BY id DESC LIMIT 1")
+    bm = await brow.fetchone()
+    if bm:
+        benchmark_data = dict(bm)
+        benchmark_data["languages"] = json.loads(benchmark_data["languages"]) if isinstance(benchmark_data["languages"], str) else benchmark_data["languages"]
+        benchmark_data["repo_details"] = json.loads(benchmark_data["repo_details"]) if isinstance(benchmark_data["repo_details"], str) else benchmark_data["repo_details"]
+
+    ai_result = await ai_analyze(repo_analysis, candidate["description"], demo_url, benchmark_data)
 
     track_b = ai_result.get("track_b", {})
     weighted_score = ai_result.get("weighted_score", 0)
+    benchmark_comparison = ai_result.get("benchmark_comparison", {})
 
     await db.execute(
         """UPDATE candidates SET status='analyzed', scores=?, report=?, recommendation=?,
@@ -121,7 +132,10 @@ async def analyze_candidate(candidate_id: int, request: Request):
             json.dumps(ai_result.get("scores", {})),
             ai_result.get("report", ""),
             ai_result.get("recommendation", "Maybe"),
-            json.dumps({k: v for k, v in repo_analysis.items() if k != "sample_code"}),
+            json.dumps({
+                **(({k: v for k, v in repo_analysis.items() if k != "sample_code"})),
+                "benchmark_comparison": benchmark_comparison,
+            }),
             json.dumps(track_b),
             weighted_score,
             user_email or "",
@@ -138,7 +152,44 @@ async def analyze_candidate(candidate_id: int, request: Request):
         "weighted_score": weighted_score,
         "track_b": track_b,
         "recommendation": ai_result.get("recommendation"),
+        "benchmark_comparison": benchmark_comparison,
     }
+
+
+# ── Tokamak Org Benchmark ──
+
+@app.post("/api/benchmark/refresh")
+async def refresh_benchmark():
+    """Analyze tokamak-network org repos and save benchmark profile."""
+    benchmark = await analyze_org_benchmark("tokamak-network", months=6, max_repos=15)
+    if "error" in benchmark:
+        raise HTTPException(400, benchmark["error"])
+    db = await get_db()
+    await db.execute(
+        """INSERT INTO org_benchmark (org_name, repo_count, avg_file_count, avg_commit_count, avg_size_kb, test_ratio, languages, repo_details)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (benchmark["org_name"], benchmark["repo_count"], benchmark["avg_file_count"],
+         benchmark["avg_commit_count"], benchmark["avg_size_kb"], benchmark["test_ratio"],
+         json.dumps(benchmark["languages"]), json.dumps(benchmark["repo_details"])))
+    await db.commit()
+    await db.close()
+    return benchmark
+
+
+@app.get("/api/benchmark/latest")
+async def get_latest_benchmark():
+    """Get the most recent benchmark profile."""
+    db = await get_db()
+    row = await db.execute("SELECT * FROM org_benchmark ORDER BY id DESC LIMIT 1")
+    b = await row.fetchone()
+    await db.close()
+    if not b:
+        return {"exists": False}
+    result = dict(b)
+    result["exists"] = True
+    result["languages"] = json.loads(result["languages"]) if isinstance(result["languages"], str) else result["languages"]
+    result["repo_details"] = json.loads(result["repo_details"]) if isinstance(result["repo_details"], str) else result["repo_details"]
+    return result
 
 
 @app.get("/api/candidates")
@@ -1466,6 +1517,54 @@ async def delete_payroll(payroll_id: int):
     await db.commit()
     await db.close()
     return {"message": "Deleted"}
+
+@app.post("/api/hr/payroll/bulk-delete")
+async def bulk_delete_payroll(data: dict):
+    ids = data.get("ids", [])
+    if not ids:
+        return {"message": "No ids"}
+    db = await get_db()
+    placeholders = ",".join("?" for _ in ids)
+    await db.execute(f"DELETE FROM payrolls WHERE id IN ({placeholders})", ids)
+    await db.commit()
+    await db.close()
+    return {"message": f"{len(ids)}건 삭제"}
+
+@app.post("/api/hr/payroll/recalculate")
+async def recalculate_payroll(data: dict):
+    """경비 포함하여 krw_amount / net_pay_krw 재계산"""
+    year, month = data.get("year"), data.get("month")
+    if not year or not month:
+        raise HTTPException(400, "year, month required")
+    db = await get_db()
+    rows = await db.execute(
+        "SELECT p.id, p.member_id, p.usdt_amount, p.krw_rate FROM payrolls p WHERE p.year=? AND p.month=?",
+        (year, month))
+    payrolls = [dict(r) for r in await rows.fetchall()]
+    updated = 0
+    for p in payrolls:
+        rate = p["krw_rate"] or 0
+        if rate <= 0:
+            continue
+        # 경비 조회
+        exp_row = await db.execute(
+            "SELECT COALESCE(SUM(amount_usdt), 0) as total FROM expenses WHERE member_id=? AND year=? AND month=?",
+            (p["member_id"], year, month))
+        expense_usdt = (await exp_row.fetchone())["total"]
+        total_usdt = p["usdt_amount"] + expense_usdt
+        krw_amount = round(total_usdt * rate)
+        # 세금은 service fee 기준 (경비는 비과세)
+        service_krw = round(p["usdt_amount"] * rate)
+        tax_result = calculate_tax(service_krw)
+        tax = round(tax_result.get("total_tax_100", 0))
+        net_pay = krw_amount - tax
+        await db.execute(
+            "UPDATE payrolls SET krw_amount=?, tax_simulated=?, net_pay_krw=? WHERE id=?",
+            (krw_amount, tax, net_pay, p["id"]))
+        updated += 1
+    await db.commit()
+    await db.close()
+    return {"message": f"{updated}건 재계산 완료"}
 
 @app.post("/api/hr/payroll/confirm")
 async def confirm_payroll(data: PayrollConfirm):

@@ -251,6 +251,18 @@ async def init_db():
         created_at TEXT,
         FOREIGN KEY (member_id) REFERENCES hr_members(id)
     );
+    CREATE TABLE IF NOT EXISTS org_benchmark (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        org_name TEXT NOT NULL,
+        repo_count INTEGER DEFAULT 0,
+        avg_file_count REAL DEFAULT 0,
+        avg_commit_count REAL DEFAULT 0,
+        avg_size_kb REAL DEFAULT 0,
+        test_ratio REAL DEFAULT 0,
+        languages TEXT DEFAULT '{}',
+        repo_details TEXT DEFAULT '[]',
+        created_at TEXT DEFAULT (datetime('now'))
+    );
     CREATE TABLE IF NOT EXISTS hr_settings (
         key TEXT PRIMARY KEY,
         value TEXT

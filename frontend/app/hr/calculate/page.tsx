@@ -158,8 +158,12 @@ export default function PayrollCalculate() {
                 <td className="text-right p-3 text-amber-600">{"\u20A9"}{fmt(results.reduce((s, r) => s + r.local_tax, 0))}</td>
                 <td className="text-right p-3 text-amber-600">
                   <div>{"\u20A9"}{fmt(totalTax)}</div>
+                  {results[0]?.krw_rate > 0 && <div className="text-xs text-gray-400 font-normal">${fmt(totalTax / results[0].krw_rate)}</div>}
                 </td>
-                <td className="text-right p-3">{"\u20A9"}{fmt(totalNet)}</td>
+                <td className="text-right p-3">
+                  <div>{"\u20A9"}{fmt(totalNet)}</div>
+                  {results[0]?.krw_rate > 0 && <div className="text-xs text-gray-400 font-normal">${fmt(totalNet / results[0].krw_rate)}</div>}
+                </td>
               </tr>
             </tfoot>
           </table>

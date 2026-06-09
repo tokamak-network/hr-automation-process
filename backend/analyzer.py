@@ -536,7 +536,7 @@ Return ONLY valid JSON.""".format(
     )
 
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(api_url, headers={
                 "Authorization": "Bearer {}".format(api_key),
                 "Content-Type": "application/json"
@@ -558,7 +558,9 @@ Return ONLY valid JSON.""".format(
                 result["weighted_score"] = calculate_weighted_score(result["scores"])
             return result
     except Exception as e:
-        print("AI analysis failed: {}".format(e))
+        import traceback
+        print("AI analysis failed: {} — {}".format(type(e).__name__, e))
+        traceback.print_exc()
         return _fallback_scores(repo_analysis)
 
 

@@ -117,7 +117,12 @@ async def analyze_candidate(candidate_id: int, request: Request):
     if bm:
         benchmark_data = dict(bm)
         benchmark_data["languages"] = json.loads(benchmark_data["languages"]) if isinstance(benchmark_data["languages"], str) else benchmark_data["languages"]
-        benchmark_data["repo_details"] = json.loads(benchmark_data["repo_details"]) if isinstance(benchmark_data["repo_details"], str) else benchmark_data["repo_details"]
+        raw_details = json.loads(benchmark_data["repo_details"]) if isinstance(benchmark_data["repo_details"], str) else benchmark_data["repo_details"]
+        if isinstance(raw_details, dict) and "_quality_metrics" in raw_details:
+            benchmark_data.update(raw_details["_quality_metrics"])
+            benchmark_data["repo_details"] = raw_details.get("repos", [])
+        else:
+            benchmark_data["repo_details"] = raw_details
 
     ai_result = await ai_analyze(repo_analysis, candidate["description"], demo_url, benchmark_data)
 
@@ -164,13 +169,25 @@ async def refresh_benchmark():
     benchmark = await analyze_org_benchmark("tokamak-network", months=6, max_repos=15)
     if "error" in benchmark:
         raise HTTPException(400, benchmark["error"])
+    # Store quality metrics inside repo_details JSON to avoid schema migration
+    quality_meta = {
+        "_quality_metrics": {
+            "doc_structured_ratio": benchmark.get("doc_structured_ratio", 0),
+            "doc_install_ratio": benchmark.get("doc_install_ratio", 0),
+            "doc_codeblock_ratio": benchmark.get("doc_codeblock_ratio", 0),
+            "avg_config_files": benchmark.get("avg_config_files", 0),
+            "avg_src_dirs": benchmark.get("avg_src_dirs", 0),
+            "ci_ratio": benchmark.get("ci_ratio", 0),
+        },
+        "repos": benchmark["repo_details"],
+    }
     db = await get_db()
     await db.execute(
         """INSERT INTO org_benchmark (org_name, repo_count, avg_file_count, avg_commit_count, avg_size_kb, test_ratio, languages, repo_details)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         (benchmark["org_name"], benchmark["repo_count"], benchmark["avg_file_count"],
          benchmark["avg_commit_count"], benchmark["avg_size_kb"], benchmark["test_ratio"],
-         json.dumps(benchmark["languages"]), json.dumps(benchmark["repo_details"])))
+         json.dumps(benchmark["languages"]), json.dumps(quality_meta)))
     await db.commit()
     await db.close()
     return benchmark
@@ -188,7 +205,13 @@ async def get_latest_benchmark():
     result = dict(b)
     result["exists"] = True
     result["languages"] = json.loads(result["languages"]) if isinstance(result["languages"], str) else result["languages"]
-    result["repo_details"] = json.loads(result["repo_details"]) if isinstance(result["repo_details"], str) else result["repo_details"]
+    raw_details = json.loads(result["repo_details"]) if isinstance(result["repo_details"], str) else result["repo_details"]
+    # Extract quality metrics stored inside repo_details
+    if isinstance(raw_details, dict) and "_quality_metrics" in raw_details:
+        result.update(raw_details["_quality_metrics"])
+        result["repo_details"] = raw_details.get("repos", [])
+    else:
+        result["repo_details"] = raw_details
     return result
 
 

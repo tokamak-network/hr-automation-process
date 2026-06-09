@@ -341,6 +341,38 @@ async def analyze_repo(repo_url: str) -> dict:
                 readme = open(rp).read()[:3000]
                 break
 
+        # Quality metrics: documentation quality
+        readme_len = len(readme)
+        readme_sections = readme.count("\n#") + readme.count("\n##")
+        readme_has_code_blocks = "```" in readme
+        readme_has_install = any(kw in readme.lower() for kw in ["install", "setup", "getting started", "usage", "quick start"])
+
+        # Quality metrics: code organization
+        config_files = set()
+        max_depth = 0
+        src_dirs = set()
+        for root, dirs, files in os.walk(repo_path):
+            dirs[:] = [d for d in dirs if d not in {".git", "node_modules", "__pycache__", ".next", "dist", "build"}]
+            depth = root.replace(repo_path, "").count(os.sep)
+            if depth > max_depth:
+                max_depth = depth
+            for d in dirs:
+                if d in {"src", "lib", "pkg", "internal", "cmd", "contracts", "components", "modules", "core", "utils"}:
+                    src_dirs.add(d)
+            for f in files:
+                fl = f.lower()
+                if fl in {".eslintrc", ".eslintrc.js", ".eslintrc.json", ".prettierrc", ".prettierrc.json",
+                          "tsconfig.json", "hardhat.config.js", "hardhat.config.ts", "foundry.toml",
+                          "dockerfile", "docker-compose.yml", "docker-compose.yaml",
+                          ".github", "makefile", "justfile", "package.json", "cargo.toml", "go.mod",
+                          ".editorconfig", "pyproject.toml", "setup.py", "setup.cfg"}:
+                    config_files.add(fl)
+                if f == ".github":
+                    config_files.add(".github")
+            # Check for .github directory at top level
+            if depth == 0 and ".github" in dirs:
+                config_files.add("ci/cd")
+
         return {
             "file_count": file_count,
             "total_size_kb": round(total_size / 1024, 1),
@@ -350,6 +382,15 @@ async def analyze_repo(repo_url: str) -> dict:
             "readme_preview": readme[:500],
             "sample_code": "\n\n".join(sample_files)[:6000],
             "readme_full": readme,
+            # Quality density metrics
+            "readme_length": readme_len,
+            "readme_sections": readme_sections,
+            "readme_has_code_blocks": readme_has_code_blocks,
+            "readme_has_install_guide": readme_has_install,
+            "config_files": list(config_files),
+            "config_file_count": len(config_files),
+            "max_dir_depth": max_depth,
+            "src_dir_count": len(src_dirs),
         }
 
 
@@ -357,21 +398,19 @@ def _build_benchmark_prompt_section(benchmark: dict = None) -> str:
     """Build the benchmark comparison section for the AI prompt."""
     if not benchmark:
         return ""
-    repos = benchmark.get("repo_details", [])
-    repo_list = "\n".join(
-        f"  - {r['name']}: {r['file_count']} files, {r['commit_count']} commits, tests={'yes' if r['has_tests'] else 'no'}, langs={','.join(r['languages'][:3])}"
-        for r in repos[:10]
-    )
+    top_langs = list(benchmark.get("languages", {}).keys())[:5]
     return f"""
-**Tokamak Network Org Benchmark (last 6 months):**
-Compare the candidate's repository against these metrics from {benchmark['repo_count']} active tokamak-network repos:
-- Avg files: {benchmark['avg_file_count']}, Avg commits: {benchmark['avg_commit_count']}, Avg size: {benchmark['avg_size_kb']}KB
-- Test coverage: {int(benchmark['test_ratio'] * 100)}% of repos have tests
-- Org languages: {json.dumps(benchmark.get('languages', {}))}
-Active repos:
-{repo_list}
+**Tokamak Network Org Benchmark (last 6 months, {benchmark['repo_count']} active repos):**
+Compare the candidate's repository against these QUALITY-DENSITY metrics (not raw size/age).
+Do NOT penalize the candidate for having fewer files or commits — Tokamak repos have been maintained for months/years.
 
-Use this benchmark to assess whether the candidate's work is ABOVE, ON PAR, or BELOW the quality level of Tokamak's own recent repositories.
+Quality benchmarks from tokamak-network org:
+- Test Presence: {int(benchmark['test_ratio'] * 100)}% of repos have test directories
+- Documentation: {int(benchmark.get('doc_structured_ratio', 0) * 100)}% have structured README (2+ sections), {int(benchmark.get('doc_install_ratio', 0) * 100)}% include install/setup guide, {int(benchmark.get('doc_codeblock_ratio', 0) * 100)}% have code blocks in README
+- Code Organization: avg {benchmark.get('avg_config_files', 0)} config files (linter, CI, build tools), avg {benchmark.get('avg_src_dirs', 0)} structured src directories, {int(benchmark.get('ci_ratio', 0) * 100)}% have CI/CD (.github)
+- Primary Languages: {', '.join(top_langs)}
+
+Evaluate the candidate's repo against these quality standards, not against raw quantity metrics.
 """
 
 
@@ -381,12 +420,12 @@ def _build_benchmark_fields(benchmark: dict = None) -> str:
         return ""
     return """
 - "benchmark_comparison": object with:
-  - "overall_level": one of "above", "on_par", "below" (compared to Tokamak org average)
-  - "file_count_vs_avg": "above" / "on_par" / "below"
-  - "commit_count_vs_avg": "above" / "on_par" / "below"
-  - "test_coverage_vs_avg": "above" / "on_par" / "below"
-  - "code_quality_vs_org": "above" / "on_par" / "below"
-  - "summary": 1-2 sentence comparison summary (e.g. "This repo has more commits and better test coverage than the Tokamak org average, but fewer files.")"""
+  - "overall_level": one of "above", "on_par", "below" (quality-density compared to Tokamak org)
+  - "test_presence": "above" / "on_par" / "below" (does repo have tests vs org's test ratio?)
+  - "documentation_quality": "above" / "on_par" / "below" (README structure, install guide, code examples vs org average)
+  - "code_organization": "above" / "on_par" / "below" (config files, linter, CI/CD, modular directory structure vs org average)
+  - "language_alignment": "above" / "on_par" / "below" (overlap with org's primary languages: Solidity, TypeScript, Go, etc.)
+  - "summary": 1-2 sentence comparison summary focusing on quality density, not raw size"""
 
 
 async def ai_analyze(repo_analysis: dict, description: str = "", demo_url: str = "", benchmark: dict = None) -> dict:
@@ -628,11 +667,15 @@ async def analyze_org_benchmark(org_name: str = "tokamak-network", months: int =
     if not analyzed:
         return {"error": "No repos could be analyzed"}
 
-    # Aggregate metrics
-    total_files = [r["file_count"] for r in analyzed]
-    total_commits = [r["commit_count"] for r in analyzed]
-    total_size = [r["total_size_kb"] for r in analyzed]
-    test_count = sum(1 for r in analyzed if r["has_tests"])
+    # Aggregate quality-density metrics
+    n = len(analyzed)
+    test_count = sum(1 for r in analyzed if r.get("has_tests"))
+    readme_with_sections = sum(1 for r in analyzed if r.get("readme_sections", 0) >= 2)
+    readme_with_install = sum(1 for r in analyzed if r.get("readme_has_install_guide"))
+    readme_with_code = sum(1 for r in analyzed if r.get("readme_has_code_blocks"))
+    avg_config_files = round(sum(r.get("config_file_count", 0) for r in analyzed) / n, 1)
+    avg_src_dirs = round(sum(r.get("src_dir_count", 0) for r in analyzed) / n, 1)
+    ci_count = sum(1 for r in analyzed if "ci/cd" in r.get("config_files", []))
 
     # Aggregate language distribution
     lang_counter = Counter()
@@ -644,10 +687,11 @@ async def analyze_org_benchmark(org_name: str = "tokamak-network", months: int =
     for r in analyzed:
         repo_summaries.append({
             "name": r["repo_name"],
-            "file_count": r["file_count"],
-            "commit_count": r["commit_count"],
-            "size_kb": r["total_size_kb"],
-            "has_tests": r["has_tests"],
+            "has_tests": r.get("has_tests", False),
+            "readme_sections": r.get("readme_sections", 0),
+            "readme_has_install_guide": r.get("readme_has_install_guide", False),
+            "config_file_count": r.get("config_file_count", 0),
+            "src_dir_count": r.get("src_dir_count", 0),
             "languages": list(r.get("languages", {}).keys())[:5],
             "stars": r.get("stars", 0),
             "description": r.get("description", ""),
@@ -655,11 +699,18 @@ async def analyze_org_benchmark(org_name: str = "tokamak-network", months: int =
 
     benchmark = {
         "org_name": org_name,
-        "repo_count": len(analyzed),
-        "avg_file_count": round(sum(total_files) / len(analyzed), 1),
-        "avg_commit_count": round(sum(total_commits) / len(analyzed), 1),
-        "avg_size_kb": round(sum(total_size) / len(analyzed), 1),
-        "test_ratio": round(test_count / len(analyzed), 2),
+        "repo_count": n,
+        "avg_file_count": round(sum(r["file_count"] for r in analyzed) / n, 1),
+        "avg_commit_count": round(sum(r["commit_count"] for r in analyzed) / n, 1),
+        "avg_size_kb": round(sum(r["total_size_kb"] for r in analyzed) / n, 1),
+        "test_ratio": round(test_count / n, 2),
+        # New quality-density metrics
+        "doc_structured_ratio": round(readme_with_sections / n, 2),
+        "doc_install_ratio": round(readme_with_install / n, 2),
+        "doc_codeblock_ratio": round(readme_with_code / n, 2),
+        "avg_config_files": avg_config_files,
+        "avg_src_dirs": avg_src_dirs,
+        "ci_ratio": round(ci_count / n, 2),
         "languages": dict(lang_counter.most_common(10)),
         "repo_details": repo_summaries,
     }

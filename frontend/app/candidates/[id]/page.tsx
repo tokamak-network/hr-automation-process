@@ -246,10 +246,10 @@ export default function CandidateDetail() {
             };
             const levelLabel: Record<string, string> = { above: "Above", on_par: "On Par", below: "Below" };
             const dims = [
-              { key: "file_count_vs_avg", label: "File Count" },
-              { key: "commit_count_vs_avg", label: "Commit Count" },
-              { key: "test_coverage_vs_avg", label: "Test Coverage" },
-              { key: "code_quality_vs_org", label: "Code Quality" },
+              { key: "test_presence", label: "Test Presence" },
+              { key: "documentation_quality", label: "Documentation" },
+              { key: "code_organization", label: "Code Organization" },
+              { key: "language_alignment", label: "Language Alignment" },
             ];
             return (
               <>

@@ -3756,40 +3756,25 @@ async def decide_expense(expense_id: int, data: ExpenseDecisionBody, request: Re
             await db.close()
             raise HTTPException(400, "payment_date required for paid decision")
 
-        # Calculate confirmed USD using D-1 exchange rate
+        # Calculate confirmed USD using D-1 exchange rate via ECB
         fx_date_confirmed = None
         fx_rate_confirmed = None
         amount_usd_confirmed = expense["amount_original"]  # default if already USD
 
         if expense["currency_original"] != "USD":
-            try:
-                import httpx
-                from datetime import timedelta
-                ecos_key = os.getenv("ECOS_API_KEY", "")
-                pay_date = datetime.strptime(data.payment_date, "%Y-%m-%d")
-                end = pay_date - timedelta(days=1)
-                start = end - timedelta(days=7)
-                url = f"https://ecos.bok.or.kr/api/StatisticSearch/{ecos_key}/JSON/kr/1/10/731Y003/D/{start.strftime('%Y%m%d')}/{end.strftime('%Y%m%d')}/0000003"
-                async with httpx.AsyncClient(timeout=10) as client:
-                    resp = await client.get(url)
-                    rate_data = resp.json()
-                if "StatisticSearch" in rate_data and rate_data["StatisticSearch"]["row"]:
-                    last = rate_data["StatisticSearch"]["row"][-1]
-                    fx_rate_confirmed = float(last["DATA_VALUE"])
-                    rate_date = last["TIME"]
-                    fx_date_confirmed = f"{rate_date[:4]}-{rate_date[4:6]}-{rate_date[6:8]}"
-                    # Convert: original amount in foreign currency → USD
-                    # ECOS gives USD/KRW rate, so if currency is KRW: amount_usd = amount_krw / rate
-                    if expense["currency_original"] == "KRW":
-                        amount_usd_confirmed = round(expense["amount_original"] / fx_rate_confirmed, 2)
-                    else:
-                        # For other currencies, use estimate as fallback
-                        amount_usd_confirmed = expense["amount_usd_estimate"]
-            except Exception:
-                # Fallback to estimate if rate lookup fails
-                amount_usd_confirmed = expense["amount_usd_estimate"]
-                fx_date_confirmed = None
+            from datetime import timedelta
+            pay_date = datetime.strptime(data.payment_date, "%Y-%m-%d")
+            d1 = (pay_date - timedelta(days=1)).strftime("%Y-%m-%d")
+            ecb_rate, rate_date = await _lookup_fx_to_usd(expense["currency_original"], d1)
+            if ecb_rate:
+                fx_rate_confirmed = ecb_rate
+                fx_date_confirmed = rate_date
+                amount_usd_confirmed = round(expense["amount_original"] * ecb_rate, 2)
+            else:
+                # Rate unavailable — record without confirmed USD, do NOT guess
                 fx_rate_confirmed = None
+                fx_date_confirmed = None
+                amount_usd_confirmed = None
 
         await db.execute(
             """UPDATE expense_decisions SET

@@ -3520,6 +3520,155 @@ async def get_accounting_document_file(filename: str):
     return FileResponse(filepath, media_type=media, headers={"Content-Disposition": f"inline; filename={filename}"})
 
 
+# ── Tax Calendar endpoints ──
+
+class TaxDeadlineCreate(BaseModel):
+    title: str
+    description: str = ""
+    category: str
+    deadline_date: str
+    alert_d7: bool = True
+    alert_d1: bool = True
+    ya: int = None
+
+
+class TaxDeadlineUpdate(BaseModel):
+    title: str = None
+    description: str = None
+    category: str = None
+    deadline_date: str = None
+    alert_d7: bool = None
+    alert_d1: bool = None
+    status: str = None
+    gcal_event_id: str = None
+    ya: int = None
+
+
+@app.get("/api/hr/tax-calendar")
+async def list_tax_deadlines(ya: int = None, category: str = None):
+    db = await get_db()
+    query = "SELECT * FROM tax_deadlines WHERE 1=1"
+    params = []
+    if ya:
+        query += " AND ya = ?"
+        params.append(ya)
+    if category:
+        query += " AND category = ?"
+        params.append(category)
+    query += " ORDER BY deadline_date ASC"
+    rows = await db.execute(query, tuple(params))
+    deadlines = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+
+    # Auto-update status based on current date
+    today = datetime.now().strftime("%Y-%m-%d")
+    for d in deadlines:
+        if d["status"] not in ("completed",):
+            if d["deadline_date"] < today:
+                d["status"] = "overdue"
+            elif d["deadline_date"] == today:
+                d["status"] = "due_today"
+            else:
+                d["status"] = "upcoming"
+
+    return deadlines
+
+
+@app.get("/api/hr/tax-calendar/alerts")
+async def get_tax_alerts():
+    """Return deadlines within 7 days for alert display."""
+    from datetime import timedelta
+    today = datetime.now().date()
+    d7 = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+    today_str = today.strftime("%Y-%m-%d")
+
+    db = await get_db()
+    rows = await db.execute(
+        "SELECT * FROM tax_deadlines WHERE deadline_date BETWEEN ? AND ? AND status != 'completed' ORDER BY deadline_date ASC",
+        (today_str, d7)
+    )
+    alerts = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+
+    for a in alerts:
+        days_left = (datetime.strptime(a["deadline_date"], "%Y-%m-%d").date() - today).days
+        a["days_left"] = days_left
+        a["urgency"] = "critical" if days_left <= 1 else "warning" if days_left <= 3 else "info"
+
+    return alerts
+
+
+@app.get("/api/hr/tax-calendar/summary")
+async def tax_calendar_summary():
+    """Summary counts by status for dashboard."""
+    db = await get_db()
+    today = datetime.now().strftime("%Y-%m-%d")
+    rows = await db.execute("SELECT * FROM tax_deadlines ORDER BY deadline_date ASC")
+    all_deadlines = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+
+    overdue = 0
+    upcoming = 0
+    completed = 0
+    due_soon = 0  # within 30 days
+    from datetime import timedelta
+    d30 = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+
+    for d in all_deadlines:
+        if d["status"] == "completed":
+            completed += 1
+        elif d["deadline_date"] < today:
+            overdue += 1
+        else:
+            upcoming += 1
+            if d["deadline_date"] <= d30:
+                due_soon += 1
+
+    return {"overdue": overdue, "upcoming": upcoming, "completed": completed, "due_soon": due_soon, "total": len(all_deadlines)}
+
+
+@app.post("/api/hr/tax-calendar")
+async def create_tax_deadline(data: TaxDeadlineCreate):
+    db = await get_db()
+    await db.execute(
+        "INSERT INTO tax_deadlines (title, description, category, deadline_date, alert_d7, alert_d1, ya) VALUES (?,?,?,?,?,?,?)",
+        (data.title, data.description, data.category, data.deadline_date, int(data.alert_d7), int(data.alert_d1), data.ya)
+    )
+    await db.commit()
+    last_id = (await (await db.execute("SELECT last_insert_rowid()")).fetchone())[0]
+    await db.close()
+    return {"id": last_id, "message": "Created"}
+
+
+@app.put("/api/hr/tax-calendar/{deadline_id}")
+async def update_tax_deadline(deadline_id: int, data: TaxDeadlineUpdate):
+    db = await get_db()
+    fields = []
+    params = []
+    for key, val in data.model_dump(exclude_none=True).items():
+        if isinstance(val, bool):
+            val = int(val)
+        fields.append(f"{key} = ?")
+        params.append(val)
+    if not fields:
+        await db.close()
+        return {"message": "Nothing to update"}
+    params.append(deadline_id)
+    await db.execute(f"UPDATE tax_deadlines SET {', '.join(fields)} WHERE id = ?", tuple(params))
+    await db.commit()
+    await db.close()
+    return {"message": "Updated"}
+
+
+@app.delete("/api/hr/tax-calendar/{deadline_id}")
+async def delete_tax_deadline(deadline_id: int):
+    db = await get_db()
+    await db.execute("DELETE FROM tax_deadlines WHERE id = ?", (deadline_id,))
+    await db.commit()
+    await db.close()
+    return {"message": "Deleted"}
+
+
 if __name__ == "__main__":
     import uvicorn
     import argparse

@@ -275,6 +275,21 @@ async def init_db():
         is_active INTEGER DEFAULT 1,
         created_at TEXT DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS tax_deadlines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        category TEXT NOT NULL,
+        deadline_date TEXT NOT NULL,
+        alert_d7 INTEGER DEFAULT 1,
+        alert_d1 INTEGER DEFAULT 1,
+        is_recurring INTEGER DEFAULT 0,
+        recurrence_rule TEXT,
+        status TEXT DEFAULT 'upcoming',
+        gcal_event_id TEXT,
+        ya INTEGER,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
     """)
 
     # Seed HR members if empty
@@ -322,6 +337,33 @@ async def init_db():
             tok = random.uniform(500, 2000)
             await db.execute("INSERT INTO incentives (member_id, year, quarter, tokamak_amount, tokamak_krw_rate, krw_amount, status) VALUES (?,?,?,?,?,?,?)",
                 (mid, 2026, 1, round(tok, 2), 3200, round(tok * 3200, 0), "pending"))
+
+    # Seed tax deadlines if empty
+    cursor = await db.execute("SELECT COUNT(*) FROM tax_deadlines")
+    row = await cursor.fetchone()
+    if row[0] == 0:
+        sg_tax_deadlines = [
+            # YA2026 (FY ending Dec 2025)
+            ("GST Return — Q4 2025", "File GST F5 return for Oct–Dec 2025 quarter", "GST", "2026-01-31", 2026),
+            ("IR8A Submission", "Submit Form IR8A/IR8S employee income info to IRAS", "Employment", "2026-03-01", 2026),
+            ("ECI Filing", "File Estimated Chargeable Income within 3 months of FY end", "Corporate Tax", "2026-03-31", 2026),
+            ("Individual Tax Filing (Paper)", "Paper filing deadline for individual income tax", "Individual Tax", "2026-04-15", 2026),
+            ("Individual Tax Filing (e-Filing)", "e-Filing deadline for individual income tax", "Individual Tax", "2026-04-18", 2026),
+            ("GST Return — Q1 2026", "File GST F5 return for Jan–Mar 2026 quarter", "GST", "2026-04-30", 2026),
+            ("GST Return — Q2 2026", "File GST F5 return for Apr–Jun 2026 quarter", "GST", "2026-07-31", 2026),
+            ("GST Return — Q3 2026", "File GST F5 return for Jul–Sep 2026 quarter", "GST", "2026-10-31", 2026),
+            ("Form C-S / Form C Filing", "File corporate tax return for YA2026", "Corporate Tax", "2026-11-30", 2026),
+            # YA2027 early
+            ("GST Return — Q4 2026", "File GST F5 return for Oct–Dec 2026 quarter", "GST", "2027-01-31", 2027),
+            ("IR8A Submission (YA2027)", "Submit Form IR8A/IR8S employee income info to IRAS for YA2027", "Employment", "2027-03-01", 2027),
+            ("ECI Filing (YA2027)", "File Estimated Chargeable Income for YA2027", "Corporate Tax", "2027-03-31", 2027),
+        ]
+        for title, desc, cat, deadline, ya in sg_tax_deadlines:
+            status = "overdue" if deadline < datetime.now().strftime("%Y-%m-%d") else "upcoming"
+            await db.execute(
+                "INSERT INTO tax_deadlines (title, description, category, deadline_date, status, ya) VALUES (?,?,?,?,?,?)",
+                (title, desc, cat, deadline, status, ya)
+            )
 
     # Migration: add linkedin_url to monitor_candidates if missing
     try:

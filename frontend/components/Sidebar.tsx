@@ -24,6 +24,7 @@ const sections = [
       { href: "/hr/fiat", label: "법인 입출금", icon: "🏦" },
       { href: "/hr/calculate", label: "급여 계산", icon: "📋" },
       { href: "/hr/tax", label: "세금 시뮬레이션", icon: "🧮" },
+      { href: "/hr/tax-calendar", label: "Tax Calendar", icon: "📅" },
       { href: "/hr/settings", label: "설정", icon: "⚙️" },
     ],
   },
@@ -61,7 +62,7 @@ export default function Sidebar() {
             </div>
             <div className="space-y-0.5">
               {section.items.map((item) => {
-                const active = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
+                const active = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href + "/"));
                 return (
                   <Link
                     key={item.href}

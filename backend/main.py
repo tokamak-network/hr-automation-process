@@ -22,11 +22,17 @@ from github_linkedin import bridge_github_candidates
 from github_sourcing import search_github_developers
 # matching.py is now unified into analyzer.py (recommend_reviewers)
 
+from expense_db import init_expense_db, get_expense_db
+from expense_scheduler import scheduler_loop, monthly_notify
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     init_linkedin_db()
+    await init_expense_db()
+    task = asyncio.create_task(scheduler_loop())
     yield
+    task.cancel()
 
 app = FastAPI(title="Tokamak Hiring Framework", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -3518,6 +3524,300 @@ async def get_accounting_document_file(filename: str):
     ext = os.path.splitext(filename)[1].lower()
     media = "application/pdf" if ext == ".pdf" else "image/png" if ext == ".png" else "image/jpeg" if ext in (".jpg", ".jpeg") else "application/octet-stream"
     return FileResponse(filepath, media_type=media, headers={"Content-Disposition": f"inline; filename={filename}"})
+
+
+# ── Expense Decision endpoints (§3 — operator only, no auto-payment) ──
+
+OPERATOR_EMAILS = {"jaden@tokamak.network", "kevin@tokamak.network"}
+
+
+def require_operator(request: Request):
+    """Raise 403 if caller is not an operator."""
+    email = get_user_email(request)
+    if not email or email not in OPERATOR_EMAILS:
+        raise HTTPException(403, "Operator role required for expense data")
+
+
+class ExpenseRow(BaseModel):
+    period: str
+    submitter: str
+    vendor: Optional[str] = None
+    item: Optional[str] = None
+    reason: Optional[str] = None
+    amount_original: float
+    currency_original: str = "USD"
+    fx_date_estimate: Optional[str] = None
+    fx_rate_estimate: Optional[float] = None
+    amount_usd_estimate: Optional[float] = None
+    evidence_status: str = "incomplete"
+    evidence_ref: Optional[str] = None
+    flags: Optional[str] = None
+
+
+class ExpenseIngest(BaseModel):
+    rows: list[ExpenseRow]
+
+
+class ExpenseDecisionBody(BaseModel):
+    decision: str  # paid / hold / more_docs
+    payment_date: str = None  # required if decision=paid
+    decided_by: str = None
+
+
+async def _lookup_fx_to_usd(currency: str, date_str: str) -> tuple:
+    """
+    Look up exchange rate from a foreign currency to USD for a given date.
+    Source: ECB SDMX Data API (official ECB daily reference rates, free, no key).
+    Searches date ±7 days to find nearest business day rate.
+    Returns (fx_rate_to_usd, rate_date_used) or (None, None) on failure.
+    """
+    if currency == "USD":
+        return (1.0, date_str)
+    import httpx
+    from datetime import timedelta
+    try:
+        target = datetime.strptime(date_str, "%Y-%m-%d")
+        start = (target - timedelta(days=7)).strftime("%Y-%m-%d")
+        end = (target + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        if currency == "EUR":
+            # ECB gives EUR-based rates; for EUR→USD, query USD rate directly
+            url = f"https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?startPeriod={start}&endPeriod={end}&format=csvdata"
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    return (None, None)
+                lines = resp.text.strip().split("\n")
+                if len(lines) < 2:
+                    return (None, None)
+                # Last data row = closest to target date
+                last_line = lines[-1]
+                parts = last_line.split(",")
+                rate_date = parts[6]   # TIME_PERIOD
+                rate_val = float(parts[7])  # OBS_VALUE = USD per 1 EUR
+                return (rate_val, rate_date)
+        else:
+            # For non-EUR currencies: get both CURRENCY/EUR and USD/EUR, then derive
+            # Step 1: Get CURRENCY per EUR
+            url_cur = f"https://data-api.ecb.europa.eu/service/data/EXR/D.{currency}.EUR.SP00.A?startPeriod={start}&endPeriod={end}&format=csvdata"
+            url_usd = f"https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?startPeriod={start}&endPeriod={end}&format=csvdata"
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp_cur, resp_usd = await asyncio.gather(
+                    client.get(url_cur), client.get(url_usd)
+                )
+            if resp_cur.status_code != 200 or resp_usd.status_code != 200:
+                return (None, None)
+            lines_cur = resp_cur.text.strip().split("\n")
+            lines_usd = resp_usd.text.strip().split("\n")
+            if len(lines_cur) < 2 or len(lines_usd) < 2:
+                return (None, None)
+            cur_per_eur = float(lines_cur[-1].split(",")[7])  # e.g. SGD per EUR
+            usd_per_eur = float(lines_usd[-1].split(",")[7])  # USD per EUR
+            rate_date = lines_usd[-1].split(",")[6]
+            # 1 CURRENCY = (usd_per_eur / cur_per_eur) USD
+            fx_rate = round(usd_per_eur / cur_per_eur, 6)
+            return (fx_rate, rate_date)
+    except Exception:
+        return (None, None)
+
+
+@app.post("/api/expenses/ingest")
+async def ingest_expenses(data: ExpenseIngest, request: Request):
+    """Ingest structured expense rows as 'pending'. Dedup on (period, submitter, vendor, amount, fx_date).
+    For non-USD currencies with fx_date_estimate, auto-looks up ECB rate. Never uses guessed rates."""
+    require_operator(request)
+    db = await get_expense_db()
+    inserted = 0
+    skipped = 0
+    fx_warnings = []
+    for row in data.rows:
+        fx_rate = row.fx_rate_estimate
+        usd_est = row.amount_usd_estimate
+        flags = row.flags
+
+        # Auto-lookup: non-USD with a date but no rate provided
+        if row.currency_original != "USD" and row.fx_date_estimate and fx_rate is None:
+            ecb_rate, _ = await _lookup_fx_to_usd(row.currency_original, row.fx_date_estimate)
+            if ecb_rate:
+                fx_rate = ecb_rate
+                usd_est = round(row.amount_original * ecb_rate, 2)
+            else:
+                # Rate unavailable — flag it, do NOT guess
+                flag_msg = "환율미확보"
+                flags = f"{flags},{flag_msg}" if flags else flag_msg
+                fx_warnings.append(f"{row.submitter}/{row.vendor}: {row.currency_original} rate not found for {row.fx_date_estimate}")
+
+        # If caller provided rate but not USD estimate, calculate it
+        if fx_rate is not None and usd_est is None:
+            usd_est = round(row.amount_original * fx_rate, 2)
+
+        try:
+            await db.execute(
+                """INSERT INTO expense_decisions
+                   (period, submitter, vendor, item, reason, amount_original, currency_original,
+                    fx_date_estimate, fx_rate_estimate, amount_usd_estimate,
+                    evidence_status, evidence_ref, flags, decision)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pending')""",
+                (row.period, row.submitter, row.vendor, row.item, row.reason,
+                 row.amount_original, row.currency_original,
+                 row.fx_date_estimate, fx_rate, usd_est,
+                 row.evidence_status, row.evidence_ref, flags)
+            )
+            inserted += 1
+        except Exception:
+            skipped += 1  # dedup unique constraint violation
+    await db.commit()
+    await db.close()
+    result = {"inserted": inserted, "skipped_duplicates": skipped}
+    if fx_warnings:
+        result["fx_warnings"] = fx_warnings
+    return result
+
+
+@app.get("/api/expenses")
+async def list_expenses(request: Request, period: str = None, decision: str = None):
+    """List expense decisions. Filter by period (YYYY-MM) and/or decision status."""
+    require_operator(request)
+    db = await get_expense_db()
+    query = "SELECT * FROM expense_decisions WHERE 1=1"
+    params = []
+    if period:
+        query += " AND period = ?"
+        params.append(period)
+    if decision:
+        query += " AND decision = ?"
+        params.append(decision)
+    query += " ORDER BY created_at DESC"
+    rows = await db.execute(query, tuple(params))
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+
+@app.get("/api/expenses/summary")
+async def expense_summary(request: Request, period: str = None):
+    """Per-submitter summary of confirmed USD amounts."""
+    require_operator(request)
+    db = await get_expense_db()
+    query = """SELECT submitter,
+               COUNT(*) as count,
+               SUM(CASE WHEN decision='paid' THEN amount_usd_confirmed ELSE 0 END) as total_usd_confirmed,
+               SUM(CASE WHEN decision='pending' THEN 1 ELSE 0 END) as pending_count,
+               SUM(CASE WHEN decision='paid' THEN 1 ELSE 0 END) as paid_count,
+               SUM(CASE WHEN decision='hold' THEN 1 ELSE 0 END) as hold_count
+               FROM expense_decisions"""
+    params = []
+    if period:
+        query += " WHERE period = ?"
+        params.append(period)
+    query += " GROUP BY submitter ORDER BY submitter"
+    rows = await db.execute(query, tuple(params))
+    result = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+    return result
+
+
+@app.get("/api/expenses/{expense_id}")
+async def get_expense(expense_id: int, request: Request):
+    """Get single expense decision detail."""
+    require_operator(request)
+    db = await get_expense_db()
+    row = await db.execute("SELECT * FROM expense_decisions WHERE id = ?", (expense_id,))
+    item = await row.fetchone()
+    await db.close()
+    if not item:
+        raise HTTPException(404, "Expense not found")
+    return dict(item)
+
+
+@app.post("/api/expenses/{expense_id}/decision")
+async def decide_expense(expense_id: int, data: ExpenseDecisionBody, request: Request):
+    """
+    Record a decision. If decision='paid', backend calculates confirmed USD from D-1 exchange rate.
+    NO automatic payment is made — record only.
+    """
+    require_operator(request)
+    if data.decision not in ("paid", "hold", "more_docs"):
+        raise HTTPException(400, "decision must be: paid, hold, or more_docs")
+
+    db = await get_expense_db()
+    row = await db.execute("SELECT * FROM expense_decisions WHERE id = ?", (expense_id,))
+    expense = await row.fetchone()
+    if not expense:
+        await db.close()
+        raise HTTPException(404, "Expense not found")
+    expense = dict(expense)
+
+    decided_by = data.decided_by or get_user_email(request) or "operator"
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    if data.decision == "paid":
+        if not data.payment_date:
+            await db.close()
+            raise HTTPException(400, "payment_date required for paid decision")
+
+        # Calculate confirmed USD using D-1 exchange rate
+        fx_date_confirmed = None
+        fx_rate_confirmed = None
+        amount_usd_confirmed = expense["amount_original"]  # default if already USD
+
+        if expense["currency_original"] != "USD":
+            try:
+                import httpx
+                from datetime import timedelta
+                ecos_key = os.getenv("ECOS_API_KEY", "")
+                pay_date = datetime.strptime(data.payment_date, "%Y-%m-%d")
+                end = pay_date - timedelta(days=1)
+                start = end - timedelta(days=7)
+                url = f"https://ecos.bok.or.kr/api/StatisticSearch/{ecos_key}/JSON/kr/1/10/731Y003/D/{start.strftime('%Y%m%d')}/{end.strftime('%Y%m%d')}/0000003"
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.get(url)
+                    rate_data = resp.json()
+                if "StatisticSearch" in rate_data and rate_data["StatisticSearch"]["row"]:
+                    last = rate_data["StatisticSearch"]["row"][-1]
+                    fx_rate_confirmed = float(last["DATA_VALUE"])
+                    rate_date = last["TIME"]
+                    fx_date_confirmed = f"{rate_date[:4]}-{rate_date[4:6]}-{rate_date[6:8]}"
+                    # Convert: original amount in foreign currency → USD
+                    # ECOS gives USD/KRW rate, so if currency is KRW: amount_usd = amount_krw / rate
+                    if expense["currency_original"] == "KRW":
+                        amount_usd_confirmed = round(expense["amount_original"] / fx_rate_confirmed, 2)
+                    else:
+                        # For other currencies, use estimate as fallback
+                        amount_usd_confirmed = expense["amount_usd_estimate"]
+            except Exception:
+                # Fallback to estimate if rate lookup fails
+                amount_usd_confirmed = expense["amount_usd_estimate"]
+                fx_date_confirmed = None
+                fx_rate_confirmed = None
+
+        await db.execute(
+            """UPDATE expense_decisions SET
+               decision='paid', payment_date=?, fx_date_confirmed=?, fx_rate_confirmed=?,
+               amount_usd_confirmed=?, decided_by=?, decided_at=?, updated_at=?
+               WHERE id=?""",
+            (data.payment_date, fx_date_confirmed, fx_rate_confirmed,
+             amount_usd_confirmed, decided_by, now, now, expense_id)
+        )
+    else:
+        await db.execute(
+            """UPDATE expense_decisions SET
+               decision=?, decided_by=?, decided_at=?, updated_at=?
+               WHERE id=?""",
+            (data.decision, decided_by, now, now, expense_id)
+        )
+
+    await db.commit()
+    await db.close()
+    return {"message": f"Decision '{data.decision}' recorded", "id": expense_id}
+
+
+@app.post("/api/expenses/trigger")
+async def trigger_expense_notify(request: Request):
+    """Manual trigger: count pending expenses for current month and send notification. No payment."""
+    require_operator(request)
+    result = await monthly_notify()
+    return result
 
 
 # ── Tax Calendar endpoints ──

@@ -1,14 +1,20 @@
 backend/venv/
-backend/*.db
 frontend/node_modules/
 frontend/.next/
 __pycache__/
 backend/.env
 payroll/backend/venv/
-payroll/backend/*.db
 payroll/frontend/node_modules/
 payroll/frontend/.next/
 .DS_Store
 backend/backups/
 backend/uploads/
 .env
+
+# data stores — never commit (public repo)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+/data/

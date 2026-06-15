@@ -1,7 +1,7 @@
 """
 Monthly expense trigger — runs inside the backend process.
 On the configured day each month, notifies that N pending items await review.
-Ingest is triggered via the /api/expenses/trigger endpoint (manual or cron).
+Uses Supabase `expenses` table (via postgres role).
 NO automatic payment. Record + notify only.
 """
 import os
@@ -9,7 +9,6 @@ import asyncio
 import logging
 from datetime import datetime, date
 
-import aiosqlite
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -41,23 +40,28 @@ async def send_telegram(message: str):
         return False
 
 
-async def get_pending_count(period: str) -> int:
-    """Count pending expense decisions for a given period."""
-    from expense_db import get_expense_db
-    db = await get_expense_db()
+async def get_pending_count(year: int, month: int) -> int:
+    """Count pending expenses for a given year/month in Supabase."""
+    from db import get_db
+    db = await get_db()
     row = await db.execute(
-        "SELECT COUNT(*) FROM expense_decisions WHERE period = ? AND decision = 'pending'",
-        (period,)
+        "SELECT COUNT(*) FROM expenses WHERE year=? AND month=? AND status='pending'",
+        (year, month)
     )
     result = await row.fetchone()
     await db.close()
-    return result[0] if result else 0
+    count = result[0] if result else 0
+    # result may be a dict from PgCursorWrapper
+    if isinstance(count, dict):
+        count = list(count.values())[0]
+    return count
 
 
 async def monthly_notify():
     """Check pending expenses for current month and send notification."""
-    period = date.today().strftime("%Y-%m")
-    count = await get_pending_count(period)
+    today = date.today()
+    count = await get_pending_count(today.year, today.month)
+    period = today.strftime("%Y-%m")
 
     if count > 0:
         msg = (
@@ -87,8 +91,7 @@ async def scheduler_loop():
                 await monthly_notify()
                 notified_month = current_month
 
-            # Sleep until next day check (check at 09:00 KST-ish)
-            await asyncio.sleep(3600)  # check every hour
+            await asyncio.sleep(3600)
         except asyncio.CancelledError:
             break
         except Exception as e:

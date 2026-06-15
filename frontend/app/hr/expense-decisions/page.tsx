@@ -6,39 +6,44 @@ const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 interface Expense {
   id: number;
-  period: string;
-  submitter: string;
+  member_id: number;
+  name: string | null;       // from LEFT JOIN hr_members
+  year: number;
+  month: number;
   vendor: string | null;
-  item: string | null;
-  reason: string | null;
-  amount_original: number;
-  currency_original: string;
-  amount_usd_estimate: number | null;
-  amount_usd_confirmed: number | null;
-  evidence_status: string;
+  description: string | null;
+  category: string | null;
+  amount_original: number | null;
+  currency_original: string | null;
+  amount_usdt: number | null;
+  amount_usdt_estimate: number | null;
+  amount_usdt_confirmed: number | null;
+  evidence_status: string | null;
+  evidence_ref: string | null;
   flags: string | null;
-  decision: string;
+  status: string;
   decided_by: string | null;
   decided_at: string | null;
-  payment_date: string | null;
+  expense_date: string | null;
 }
 
-interface Summary {
-  submitter: string;
-  count: number;
-  total_usd_confirmed: number;
-  pending_count: number;
-  paid_count: number;
-  hold_count: number;
-}
+const fmt = (n: number | null | undefined) =>
+  n != null ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-";
 
-const fmt = (n: number | null) => n != null ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-";
-
-const decisionBadge: Record<string, string> = {
+const statusBadge: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-700",
+  approved: "bg-blue-100 text-blue-700",
   paid: "bg-green-100 text-green-700",
   hold: "bg-red-100 text-red-700",
   more_docs: "bg-orange-100 text-orange-700",
+};
+
+const statusLabel: Record<string, string> = {
+  pending: "Pending",
+  approved: "Approved",
+  paid: "Paid",
+  hold: "Hold",
+  more_docs: "More Docs",
 };
 
 const evidenceBadge: Record<string, string> = {
@@ -46,19 +51,16 @@ const evidenceBadge: Record<string, string> = {
   incomplete: "bg-gray-100 text-gray-500",
 };
 
-function currentPeriod() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
+const now = new Date();
 
 export default function ExpenseDecisionsPage() {
   const { user } = useAuth();
-  const [period, setPeriod] = useState(currentPeriod());
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [summary, setSummary] = useState<Summary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [payModal, setPayModal] = useState<{ id: number; submitter: string } | null>(null);
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
+  const [payModal, setPayModal] = useState<{ id: number; label: string } | null>(null);
+  const [paymentDate, setPaymentDate] = useState(now.toISOString().split("T")[0]);
   const [actionLoading, setActionLoading] = useState(false);
 
   const headers: Record<string, string> = {
@@ -69,31 +71,26 @@ export default function ExpenseDecisionsPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [expRes, sumRes] = await Promise.all([
-        fetch(`${API}/api/expenses?period=${period}`, { headers }),
-        fetch(`${API}/api/expenses/summary?period=${period}`, { headers }),
-      ]);
-      if (expRes.ok) setExpenses(await expRes.json());
+      const res = await fetch(`${API}/api/hr/expenses?year=${year}&month=${month}`, { headers });
+      if (res.ok) setExpenses(await res.json());
       else setExpenses([]);
-      if (sumRes.ok) setSummary(await sumRes.json());
-      else setSummary([]);
     } catch {
       setExpenses([]);
-      setSummary([]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchData(); }, [period, user]);
+  useEffect(() => { fetchData(); }, [year, month, user]);
 
-  const pendingExpenses = useMemo(() => expenses.filter((e) => e.decision === "pending"), [expenses]);
-  const decidedExpenses = useMemo(() => expenses.filter((e) => e.decision !== "pending"), [expenses]);
+  // Split: actionable (pending + hold + more_docs) vs decided (approved + paid)
+  const actionable = useMemo(() => expenses.filter((e) => ["pending", "hold", "more_docs"].includes(e.status)), [expenses]);
+  const decided = useMemo(() => expenses.filter((e) => ["approved", "paid"].includes(e.status)), [expenses]);
 
   const handleDecision = async (id: number, decision: string, payDate?: string) => {
     setActionLoading(true);
     try {
-      await fetch(`${API}/api/expenses/${id}/decision`, {
+      await fetch(`${API}/api/hr/expenses/${id}/decision`, {
         method: "POST",
         headers,
         body: JSON.stringify({ decision, payment_date: payDate }),
@@ -105,99 +102,91 @@ export default function ExpenseDecisionsPage() {
     }
   };
 
+  const displayName = (e: Expense) => {
+    if (e.flags?.includes("매핑실패")) return `[unmapped] member_id=${e.member_id}`;
+    return e.name || `member #${e.member_id}`;
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Expense Decisions</h1>
           <p className="text-sm text-gray-500 mt-1">Operator console — review and approve expense claims</p>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-500">Period</label>
-          <input
-            type="month"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="border rounded-lg px-3 py-1.5 text-sm"
-          />
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="border rounded-lg px-2 py-1.5 text-sm">
+            {[2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="border rounded-lg px-2 py-1.5 text-sm">
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{m}月</option>)}
+          </select>
         </div>
       </div>
-
-      {/* Summary Cards */}
-      {summary.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          {summary.map((s) => (
-            <div key={s.submitter} className="bg-white rounded-xl border border-gray-200 p-4">
-              <div className="text-sm font-medium text-gray-900">{s.submitter}</div>
-              <div className="text-xs text-gray-400 mt-1">
-                {s.pending_count} pending / {s.paid_count} paid / {s.hold_count} hold
-              </div>
-              <div className="text-lg font-bold text-[#2A72E5] mt-1">
-                ${fmt(s.total_usd_confirmed)} <span className="text-xs font-normal text-gray-400">confirmed</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {loading ? (
         <div className="text-center py-20 text-gray-400">Loading...</div>
       ) : expenses.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">No expenses for {period}</div>
+        <div className="text-center py-20 text-gray-400">No expenses for {year}-{String(month).padStart(2, "0")}</div>
       ) : (
         <>
-          {/* Pending — needs action */}
-          {pendingExpenses.length > 0 && (
+          {/* Actionable — pending / hold / more_docs */}
+          {actionable.length > 0 && (
             <div className="mb-8">
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                Pending ({pendingExpenses.length})
+                Needs Action ({actionable.length})
               </h2>
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <th className="px-4 py-3">Submitter</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Name</th>
                       <th className="px-4 py-3">Vendor</th>
                       <th className="px-4 py-3">Item</th>
                       <th className="px-4 py-3 text-right">Original</th>
-                      <th className="px-4 py-3 text-right">Est. USD</th>
+                      <th className="px-4 py-3 text-right">Est. USDT</th>
                       <th className="px-4 py-3">Evidence</th>
                       <th className="px-4 py-3">Flags</th>
                       <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pendingExpenses.map((e) => (
-                      <tr key={e.id} className="border-b hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium">{e.submitter}</td>
-                        <td className="px-4 py-3 text-gray-600">{e.vendor || "-"}</td>
-                        <td className="px-4 py-3 text-gray-600">{e.item || "-"}</td>
-                        <td className="px-4 py-3 text-right font-mono">
-                          {fmt(e.amount_original)} <span className="text-xs text-gray-400">{e.currency_original}</span>
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono">${fmt(e.amount_usd_estimate)}</td>
+                    {actionable.map((e) => (
+                      <tr key={e.id} className={`border-b hover:bg-gray-50 ${e.flags?.includes("매핑실패") ? "bg-red-50" : ""}`}>
                         <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs ${evidenceBadge[e.evidence_status] || evidenceBadge.incomplete}`}>
-                            {e.evidence_status}
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[e.status] || ""}`}>
+                            {statusLabel[e.status] || e.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-red-500">{e.flags || "-"}</td>
+                        <td className="px-4 py-3 font-medium">{displayName(e)}</td>
+                        <td className="px-4 py-3 text-gray-600">{e.vendor || "-"}</td>
+                        <td className="px-4 py-3 text-gray-600">{e.description || "-"}</td>
+                        <td className="px-4 py-3 text-right font-mono">
+                          {e.amount_original != null ? fmt(e.amount_original) : "-"}{" "}
+                          <span className="text-xs text-gray-400">{e.currency_original || ""}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono">{fmt(e.amount_usdt_estimate)}</td>
+                        <td className="px-4 py-3">
+                          {e.evidence_status && (
+                            <span className={`px-2 py-0.5 rounded-full text-xs ${evidenceBadge[e.evidence_status] || evidenceBadge.incomplete}`}>
+                              {e.evidence_status}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {e.flags ? (
+                            <span className="text-xs text-red-600 font-medium bg-red-50 px-1.5 py-0.5 rounded">{e.flags}</span>
+                          ) : "-"}
+                        </td>
                         <td className="px-4 py-3 text-right space-x-1">
-                          <button
-                            onClick={() => setPayModal({ id: e.id, submitter: e.submitter })}
-                            className="px-2 py-1 text-xs font-medium text-white bg-green-500 rounded hover:bg-green-600"
-                            disabled={actionLoading}
-                          >Pay</button>
-                          <button
-                            onClick={() => handleDecision(e.id, "hold")}
-                            className="px-2 py-1 text-xs font-medium text-red-600 bg-red-50 rounded hover:bg-red-100"
-                            disabled={actionLoading}
-                          >Hold</button>
-                          <button
-                            onClick={() => handleDecision(e.id, "more_docs")}
-                            className="px-2 py-1 text-xs font-medium text-orange-600 bg-orange-50 rounded hover:bg-orange-100"
-                            disabled={actionLoading}
-                          >More Docs</button>
+                          <button onClick={() => setPayModal({ id: e.id, label: displayName(e) })}
+                            className="px-2 py-1 text-xs font-medium text-white bg-green-500 rounded hover:bg-green-600" disabled={actionLoading}>Pay</button>
+                          <button onClick={() => handleDecision(e.id, "hold")}
+                            className="px-2 py-1 text-xs font-medium text-red-600 bg-red-50 rounded hover:bg-red-100" disabled={actionLoading}>Hold</button>
+                          <button onClick={() => handleDecision(e.id, "more_docs")}
+                            className="px-2 py-1 text-xs font-medium text-orange-600 bg-orange-50 rounded hover:bg-orange-100" disabled={actionLoading}>More Docs</button>
                         </td>
                       </tr>
                     ))}
@@ -207,40 +196,41 @@ export default function ExpenseDecisionsPage() {
             </div>
           )}
 
-          {/* Decided */}
-          {decidedExpenses.length > 0 && (
+          {/* Decided — approved / paid */}
+          {decided.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                Decided ({decidedExpenses.length})
+                Decided ({decided.length})
               </h2>
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Submitter</th>
+                      <th className="px-4 py-3">Name</th>
                       <th className="px-4 py-3">Vendor / Item</th>
                       <th className="px-4 py-3 text-right">Original</th>
-                      <th className="px-4 py-3 text-right">Confirmed USD</th>
+                      <th className="px-4 py-3 text-right">Confirmed USDT</th>
                       <th className="px-4 py-3">Payment Date</th>
                       <th className="px-4 py-3">Decided By</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {decidedExpenses.map((e) => (
+                    {decided.map((e) => (
                       <tr key={e.id} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${decisionBadge[e.decision] || ""}`}>
-                            {e.decision}
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[e.status] || ""}`}>
+                            {statusLabel[e.status] || e.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-medium">{e.submitter}</td>
-                        <td className="px-4 py-3 text-gray-600">{[e.vendor, e.item].filter(Boolean).join(" / ") || "-"}</td>
+                        <td className="px-4 py-3 font-medium">{displayName(e)}</td>
+                        <td className="px-4 py-3 text-gray-600">{[e.vendor, e.description].filter(Boolean).join(" / ") || "-"}</td>
                         <td className="px-4 py-3 text-right font-mono">
-                          {fmt(e.amount_original)} <span className="text-xs text-gray-400">{e.currency_original}</span>
+                          {e.amount_original != null ? fmt(e.amount_original) : fmt(e.amount_usdt)}{" "}
+                          <span className="text-xs text-gray-400">{e.currency_original || "USDT"}</span>
                         </td>
-                        <td className="px-4 py-3 text-right font-mono font-bold">${fmt(e.amount_usd_confirmed)}</td>
-                        <td className="px-4 py-3 text-gray-500">{e.payment_date || "-"}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold">{fmt(e.amount_usdt_confirmed ?? e.amount_usdt)}</td>
+                        <td className="px-4 py-3 text-gray-500">{e.expense_date || "-"}</td>
                         <td className="px-4 py-3 text-xs text-gray-400">{e.decided_by || "-"}</td>
                       </tr>
                     ))}
@@ -252,30 +242,23 @@ export default function ExpenseDecisionsPage() {
         </>
       )}
 
-      {/* Pay Modal — payment_date input */}
+      {/* Pay Modal */}
       {payModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setPayModal(null)}>
           <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-1">Confirm Payment</h3>
             <p className="text-sm text-gray-500 mb-4">
-              {payModal.submitter} — Backend will calculate confirmed USD from D-1 exchange rate. No actual payment is made.
+              {payModal.label} — Backend will calculate confirmed USDT from D-1 exchange rate. No actual payment is made.
             </p>
             <div>
               <label className="text-xs font-medium text-gray-500 block mb-1">Payment Date</label>
-              <input
-                type="date"
-                value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-              />
+              <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={() => setPayModal(null)} className="px-4 py-2 text-sm text-gray-500">Cancel</button>
-              <button
-                onClick={() => handleDecision(payModal.id, "paid", paymentDate)}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600"
-                disabled={actionLoading}
-              >
+              <button onClick={() => handleDecision(payModal.id, "paid", paymentDate)}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600" disabled={actionLoading}>
                 {actionLoading ? "Processing..." : "Record Payment"}
               </button>
             </div>

@@ -5,10 +5,10 @@ import Link from "next/link";
 interface Member {
   id: number; name: string; github: string; role: string;
   monthly_usdt: number; wallet_address: string; contract_start: string;
-  contract_end?: string; is_active: number;
+  contract_end?: string; is_active: number; drive_folder_name?: string;
 }
 
-const empty: Omit<Member, "id" | "is_active"> = { name: "", github: "", role: "", monthly_usdt: 0, wallet_address: "", contract_start: "" };
+const empty: Omit<Member, "id" | "is_active"> = { name: "", github: "", role: "", monthly_usdt: 0, wallet_address: "", contract_start: "", drive_folder_name: "" };
 
 const fields: { key: string; label: string; type?: string; placeholder: string }[] = [
   { key: "name", label: "이름", placeholder: "홍길동" },
@@ -17,6 +17,7 @@ const fields: { key: string; label: string; type?: string; placeholder: string }
   { key: "monthly_usdt", label: "월급 (USDT)", type: "number", placeholder: "10000" },
   { key: "wallet_address", label: "지갑 주소", placeholder: "0x..." },
   { key: "contract_start", label: "계약 시작일", type: "date", placeholder: "" },
+  { key: "drive_folder_name", label: "Drive 폴더명", placeholder: "경비 제출 시 매핑에 사용 (미입력 시 경비 매핑 불가)" },
 ];
 
 type Tab = "active" | "retired";
@@ -31,6 +32,9 @@ function MemberModal({ initial, title, onClose, onSave }: {
 
   const submit = async () => {
     if (!form.name.trim()) return alert("이름은 필수입니다.");
+    if (!form.drive_folder_name?.trim()) {
+      if (!confirm("Drive 폴더명이 비어있으면 경비 정산 시 매핑이 불가합니다. 그래도 저장하시겠습니까?")) return;
+    }
     setSaving(true);
     await onSave(form);
     setSaving(false);

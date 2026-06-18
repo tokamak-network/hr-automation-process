@@ -57,6 +57,19 @@ async def init_db():
         source_email_id TEXT,
         detected_at TEXT
     );
+    -- C-1 §3-§4: 감지됨(검토 대기) 목록. candidates 본테이블과 분리, 발신자 단위 누적.
+    CREATE TABLE IF NOT EXISTS detected_applicants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_email TEXT NOT NULL UNIQUE,
+        sender_name TEXT,
+        repo_url TEXT,
+        wallet_address TEXT,
+        status TEXT DEFAULT 'detected',
+        source_email_ids TEXT,
+        first_detected_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        registered_candidate_id INTEGER
+    );
     CREATE TABLE IF NOT EXISTS monitor_candidates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         github_username TEXT UNIQUE NOT NULL,

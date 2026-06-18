@@ -117,11 +117,21 @@ async def _pg_migrate():
     Adds columns only — never touches RLS (default-deny stays as-is)."""
     conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
     try:
-        # C-1: email-intake columns on candidates
+        # C-1 §1: email-intake columns on candidates
         await conn.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS wallet_address TEXT")
         await conn.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual'")
         await conn.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS source_email_id TEXT")
         await conn.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS detected_at TEXT")
+        # C-1 §3: detected_applicants staging table (감지됨/검토 대기)
+        await conn.execute(
+            "CREATE TABLE IF NOT EXISTS detected_applicants ("
+            "id SERIAL PRIMARY KEY, sender_email TEXT NOT NULL UNIQUE, sender_name TEXT, "
+            "repo_url TEXT, wallet_address TEXT, status TEXT DEFAULT 'detected', "
+            "source_email_ids TEXT, first_detected_at TEXT, updated_at TEXT, "
+            "registered_candidate_id INTEGER)"
+        )
+        # RLS 기본 거부 유지: 정책 없이 RLS만 켠다(서비스 역할만 백엔드 경유 접근).
+        await conn.execute("ALTER TABLE detected_applicants ENABLE ROW LEVEL SECURITY")
     finally:
         await conn.close()
 

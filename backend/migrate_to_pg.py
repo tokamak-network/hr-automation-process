@@ -13,6 +13,8 @@ SQLITE_PATH = os.path.join(os.path.dirname(__file__), "hiring.db")
 CREATE_SQL = """
 CREATE TABLE IF NOT EXISTS candidates (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, repo_url TEXT NOT NULL, description TEXT, status TEXT DEFAULT 'submitted', scores TEXT, report TEXT, recommendation TEXT, repo_analysis TEXT, track_b_evaluation TEXT, weighted_score REAL, reviewed_by TEXT, analyzed_by TEXT, created_at TEXT, analyzed_at TEXT, demo_url TEXT, wallet_address TEXT, source TEXT DEFAULT 'manual', source_email_id TEXT, detected_at TEXT);
 
+CREATE TABLE IF NOT EXISTS detected_applicants (id SERIAL PRIMARY KEY, sender_email TEXT NOT NULL UNIQUE, sender_name TEXT, repo_url TEXT, wallet_address TEXT, status TEXT DEFAULT 'detected', source_email_ids TEXT, first_detected_at TEXT, updated_at TEXT, registered_candidate_id INTEGER);
+
 CREATE TABLE IF NOT EXISTS monitor_candidates (id SERIAL PRIMARY KEY, github_username TEXT UNIQUE NOT NULL, profile_url TEXT, bio TEXT, public_repos INTEGER DEFAULT 0, followers INTEGER DEFAULT 0, languages TEXT, contributions TEXT, scores TEXT, activity_level TEXT, last_scanned TEXT, linkedin_url TEXT);
 
 CREATE TABLE IF NOT EXISTS monitor_activities (id SERIAL PRIMARY KEY, github_username TEXT NOT NULL, activity_type TEXT NOT NULL, repo_name TEXT NOT NULL, activity_url TEXT NOT NULL, activity_date TEXT, details TEXT, created_at TEXT);

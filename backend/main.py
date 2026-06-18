@@ -93,6 +93,116 @@ async def submit_candidate(data: CandidateSubmission):
     return {"id": cid, "status": "submitted"}
 
 
+# ---- C-1 §4: 검토 게이트 (감지됨 → 승인 → candidates 등록) ----
+# 감지 건은 detected_applicants(staging)에만 있고, 운영자가 승인할 때만 candidates에
+# 들어간다. 자동 등록 없음. 미충족 건은 조용히 누락하지 말고 사유를 노출한다.
+
+def _intake_hold_reasons(row: dict) -> list:
+    """등록을 막는 사유 목록(비어 있으면 등록 가능). 화면에 그대로 표시."""
+    reasons = []
+    if not row.get("repo_url"):
+        reasons.append("GitHub repo 없음")
+    if not row.get("wallet_address"):
+        reasons.append("지갑 대기 (wallet_address 없음)")
+    if row.get("status") == "needs_review":
+        reasons.append("확인 필요 (감지 신호 애매)")
+    return reasons
+
+
+@app.get("/api/candidates/intake")
+async def list_intake():
+    """감지됨(검토 대기) 목록. 각 건의 등록 가능 여부와 보류 사유를 함께 반환."""
+    db = await get_db()
+    cur = await db.execute(
+        "SELECT * FROM detected_applicants ORDER BY first_detected_at DESC, id DESC"
+    )
+    rows = [dict(r) for r in await cur.fetchall()]
+    await db.close()
+    out = []
+    for r in rows:
+        reasons = _intake_hold_reasons(r)
+        registered = r.get("registered_candidate_id")
+        out.append({
+            "id": r["id"],
+            "sender_email": r["sender_email"],
+            "sender_name": r.get("sender_name"),
+            "repo_url": r.get("repo_url"),
+            "wallet_address": r.get("wallet_address"),
+            "status": r.get("status"),
+            "source_email_ids": json.loads(r.get("source_email_ids") or "[]"),
+            "first_detected_at": r.get("first_detected_at"),
+            "registered_candidate_id": registered,
+            "ready_to_register": (not reasons) and not registered,
+            "hold_reasons": reasons,
+        })
+    return out
+
+
+@app.post("/api/candidates/intake/{intake_id}/approve")
+async def approve_intake(intake_id: int):
+    """운영자 '등록 승인'. 조건 충족 시에만 candidates에 등록한다.
+    - 미충족(지갑 대기/repo 없음/확인 필요) → 422 + 보류 사유(자동 등록 금지).
+    - 이미 등록/같은 발신자 후보 존재 → 재등록 안 함(중복 방지)."""
+    db = await get_db()
+    cur = await db.execute("SELECT * FROM detected_applicants WHERE id=?", (intake_id,))
+    row = await cur.fetchone()
+    if not row:
+        await db.close()
+        raise HTTPException(404, "detected applicant not found")
+    r = dict(row)
+
+    # 이미 등록됨 → idempotent, 새로 만들지 않음
+    if r.get("registered_candidate_id"):
+        await db.close()
+        return {"status": "already_registered", "candidate_id": r["registered_candidate_id"]}
+
+    # 등록 보류 사유 → 자동 등록 금지, 사유를 그대로 반환(조용히 누락 X)
+    reasons = _intake_hold_reasons(r)
+    if reasons:
+        await db.close()
+        raise HTTPException(422, {"message": "등록 보류 — 조건 미충족", "hold_reasons": reasons})
+
+    # 중복 방지: 같은 발신자 이메일로 이미 candidates 존재하면 재등록 안 함
+    cur = await db.execute(
+        "SELECT id FROM candidates WHERE email=? ORDER BY id DESC LIMIT 1", (r["sender_email"],)
+    )
+    existing = await cur.fetchone()
+    if existing:
+        ex = dict(existing)
+        ex_id = ex.get("id") if "id" in ex else list(ex.values())[0]
+        await db.execute(
+            "UPDATE detected_applicants SET registered_candidate_id=?, updated_at=datetime('now') WHERE id=?",
+            (ex_id, intake_id),
+        )
+        await db.commit()
+        await db.close()
+        return {"status": "duplicate_skipped", "candidate_id": ex_id}
+
+    # 등록: status='submitted', source='email_auto'
+    name = r.get("sender_name") or r["sender_email"].split("@")[0]
+    await db.execute(
+        "INSERT INTO candidates (name, email, repo_url, description, status, wallet_address, source, source_email_id, detected_at) "
+        "VALUES (?,?,?,?, 'submitted', ?, 'email_auto', ?, ?)",
+        (name, r["sender_email"], r["repo_url"], "hr@ 자동 감지 지원",
+         r.get("wallet_address"), r.get("source_email_ids") or "[]", r.get("first_detected_at")),
+    )
+    await db.commit()
+    # 새 후보 id 조회 (SQLite/PG 공통 안전)
+    cur = await db.execute(
+        "SELECT id FROM candidates WHERE email=? AND source='email_auto' ORDER BY id DESC LIMIT 1",
+        (r["sender_email"],),
+    )
+    newrow = await cur.fetchone()
+    new_id = dict(newrow).get("id") if newrow else None
+    await db.execute(
+        "UPDATE detected_applicants SET registered_candidate_id=?, updated_at=datetime('now') WHERE id=?",
+        (new_id, intake_id),
+    )
+    await db.commit()
+    await db.close()
+    return {"status": "submitted", "source": "email_auto", "candidate_id": new_id}
+
+
 @app.post("/api/candidates/{candidate_id}/analyze")
 async def analyze_candidate(candidate_id: int, request: Request):
     user_email = get_user_email(request)

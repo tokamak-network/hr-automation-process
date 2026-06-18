@@ -23,14 +23,17 @@ from github_sourcing import search_github_developers
 # matching.py is now unified into analyzer.py (recommend_reviewers)
 
 from expense_scheduler import scheduler_loop, monthly_notify
+from intake_scheduler import scheduler_loop as intake_scheduler_loop
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     init_linkedin_db()
     task = asyncio.create_task(scheduler_loop())
+    intake_task = asyncio.create_task(intake_scheduler_loop())  # C-1 §5: 주 2회 채용 메일 스캔
     yield
     task.cancel()
+    intake_task.cancel()
 
 app = FastAPI(title="Tokamak Hiring Framework", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -107,6 +110,15 @@ def _intake_hold_reasons(row: dict) -> list:
     if row.get("status") == "needs_review":
         reasons.append("확인 필요 (감지 신호 애매)")
     return reasons
+
+
+@app.post("/api/candidates/scan-inbox")
+async def scan_inbox_endpoint(days: Optional[int] = None):
+    """수동 트리거 — 즉시 Gmail 읽기 전용 스캔 → 감지 → staging 적재 → 알림.
+    candidates 등록은 하지 않는다(검토 게이트 §4 승인 별도). 자동 회신 없음."""
+    from intake_scheduler import scan_inbox
+    summary = await scan_inbox(days=days)
+    return {"ok": True, **summary}
 
 
 @app.get("/api/candidates/intake")

@@ -11,7 +11,7 @@ DB_URL = os.getenv("DATABASE_URL")
 SQLITE_PATH = os.path.join(os.path.dirname(__file__), "hiring.db")
 
 CREATE_SQL = """
-CREATE TABLE IF NOT EXISTS candidates (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, repo_url TEXT NOT NULL, description TEXT, status TEXT DEFAULT 'submitted', scores TEXT, report TEXT, recommendation TEXT, repo_analysis TEXT, track_b_evaluation TEXT, weighted_score REAL, reviewed_by TEXT, analyzed_by TEXT, created_at TEXT, analyzed_at TEXT, demo_url TEXT, wallet_address TEXT, source TEXT DEFAULT 'manual', source_email_id TEXT, detected_at TEXT);
+CREATE TABLE IF NOT EXISTS candidates (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, repo_url TEXT NOT NULL, description TEXT, status TEXT DEFAULT 'submitted', scores TEXT, report TEXT, recommendation TEXT, repo_analysis TEXT, track_b_evaluation TEXT, weighted_score REAL, reviewed_by TEXT, analyzed_by TEXT, created_at TEXT, analyzed_at TEXT, demo_url TEXT, wallet_address TEXT, source TEXT DEFAULT 'manual', source_email_id TEXT, detected_at TEXT, reward_amount REAL, reward_token TEXT, reward_tx TEXT, reward_date TEXT, reviewer TEXT, review_comment TEXT, result_shared INTEGER);
 
 CREATE TABLE IF NOT EXISTS detected_applicants (id SERIAL PRIMARY KEY, sender_email TEXT NOT NULL UNIQUE, sender_name TEXT, repo_url TEXT, wallet_address TEXT, status TEXT DEFAULT 'detected', source_email_ids TEXT, first_detected_at TEXT, updated_at TEXT, registered_candidate_id INTEGER);
 
@@ -48,6 +48,10 @@ CREATE TABLE IF NOT EXISTS member_wallets (id SERIAL PRIMARY KEY, member_id INTE
 CREATE TABLE IF NOT EXISTS expenses (id SERIAL PRIMARY KEY, member_id INTEGER NOT NULL, year INTEGER NOT NULL, month INTEGER NOT NULL, amount_usdt REAL NOT NULL, category TEXT NOT NULL, description TEXT, tx_hash TEXT, status TEXT DEFAULT 'pending', expense_date TEXT, created_at TEXT, memo TEXT);
 
 CREATE TABLE IF NOT EXISTS fiat_transactions (id SERIAL PRIMARY KEY, tx_id TEXT, source TEXT, direction TEXT, status TEXT, amount REAL, currency TEXT, counterparty TEXT, category TEXT, reference TEXT, note TEXT, exchange_rate REAL, balance REAL, tx_date TEXT, created_at TEXT, fee_amount REAL DEFAULT 0, fee_currency REAL DEFAULT 0, gross_amount REAL DEFAULT 0);
+
+CREATE TABLE IF NOT EXISTS org_benchmark (id SERIAL PRIMARY KEY, org_name TEXT NOT NULL, repo_count INTEGER DEFAULT 0, avg_file_count REAL DEFAULT 0, avg_commit_count REAL DEFAULT 0, avg_size_kb REAL DEFAULT 0, test_ratio REAL DEFAULT 0, languages TEXT DEFAULT '{}', repo_details TEXT DEFAULT '[]', created_at TEXT);
+
+CREATE TABLE IF NOT EXISTS tax_deadlines (id SERIAL PRIMARY KEY, title TEXT NOT NULL, description TEXT, category TEXT NOT NULL, deadline_date TEXT NOT NULL, alert_d7 INTEGER DEFAULT 1, alert_d1 INTEGER DEFAULT 1, is_recurring INTEGER DEFAULT 0, recurrence_rule TEXT, status TEXT DEFAULT 'upcoming', gcal_event_id TEXT, ya INTEGER, created_at TEXT);
 """
 
 

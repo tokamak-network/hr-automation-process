@@ -1,0 +1,17 @@
+# 로컬 개발용 Postgres (운영과 분리). 시크릿 아님 — 로컬 전용 계정.
+# 운영 DATABASE_URL은 여기에 절대 넣지 않는다. 운영은 호스팅 플랫폼 env 사용.
+services:
+  hr-postgres:
+    image: postgres:16
+    container_name: hr-local-pg
+    environment:
+      POSTGRES_USER: hr
+      POSTGRES_PASSWORD: hr
+      POSTGRES_DB: hr_local
+    ports:
+      - "5433:5432"        # 호스트 5433 → 컨테이너 5432
+    volumes:
+      - hr_pg_data:/var/lib/postgresql/data
+
+volumes:
+  hr_pg_data:

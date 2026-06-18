@@ -9,12 +9,45 @@ import aiosqlite
 from dotenv import load_dotenv
 
 load_dotenv()
+# 로컬 개발 override — .env 다음에 backend/.env.local 을 우선 적용(있을 때만).
+# 운영 배포엔 .env.local 이 없으므로 무영향(플랫폼 env의 DATABASE_URL 유지).
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env.local"), override=True)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 DB_PATH = os.path.join(os.path.dirname(__file__), "hiring.db")
 
 # Use PostgreSQL if DATABASE_URL is set, otherwise SQLite
 USE_PG = bool(DATABASE_URL and DATABASE_URL.startswith("postgresql"))
+
+
+def _is_local_host(url: str) -> bool:
+    from urllib.parse import urlparse
+    try:
+        h = (urlparse(url).hostname or "").lower()
+    except Exception:
+        h = ""
+    return h in ("", "localhost", "127.0.0.1", "::1")
+
+
+# C가드 — 비로컬(운영 Supabase 등) DB로의 실수 연결 방지.
+# 호스트가 로컬이 아니면 ALLOW_PROD_DB=1 이 없는 한 즉시 중단.
+# ALLOW_PROD_DB 는 운영 플랫폼 env 에만 둔다(로컬 .env/.env.local 금지).
+if USE_PG and not _is_local_host(DATABASE_URL):
+    import sys
+    from urllib.parse import urlparse
+    _host = urlparse(DATABASE_URL).hostname or "(unknown)"
+    if os.getenv("ALLOW_PROD_DB") != "1":
+        sys.stderr.write(
+            "\n" + "=" * 70 + "\n"
+            f"  ⛔ 비로컬 DATABASE_URL 차단: host={_host}\n"
+            "  운영(또는 원격) DB로의 연결이 감지됐습니다.\n"
+            "  로컬 개발은 backend/.env.local 의 로컬 PG(localhost)를 쓰세요.\n"
+            "  의도된 운영 접속이면 ALLOW_PROD_DB=1 을 환경변수로 주입하세요\n"
+            "  (예: ALLOW_PROD_DB=1 DATABASE_URL=... python ...). 로컬 파일엔 넣지 말 것.\n"
+            + "=" * 70 + "\n\n"
+        )
+        raise RuntimeError(f"Refusing to use non-local DATABASE_URL (host={_host}) without ALLOW_PROD_DB=1")
+    sys.stderr.write(f"\n  ⚠️ ALLOW_PROD_DB=1 — 비로컬 DB(host={_host})에 연결합니다.\n\n")
 
 _pg_pool = None
 

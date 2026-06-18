@@ -112,11 +112,26 @@ async def get_db():
         return db
 
 
+async def _pg_migrate():
+    """Idempotent additive migrations for PostgreSQL/Supabase.
+    Adds columns only — never touches RLS (default-deny stays as-is)."""
+    conn = await asyncpg.connect(DATABASE_URL, statement_cache_size=0)
+    try:
+        # C-1: email-intake columns on candidates
+        await conn.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS wallet_address TEXT")
+        await conn.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual'")
+        await conn.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS source_email_id TEXT")
+        await conn.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS detected_at TEXT")
+    finally:
+        await conn.close()
+
+
 async def init_db():
     """Initialize database. For PostgreSQL, tables are created via migration script."""
     if USE_PG:
         # Tables already created by migrate_to_pg.py
         print(f"Using PostgreSQL: {DATABASE_URL[:40]}...")
+        await _pg_migrate()
         return
 
     # SQLite initialization (existing logic)

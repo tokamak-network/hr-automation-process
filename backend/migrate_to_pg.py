@@ -11,7 +11,7 @@ DB_URL = os.getenv("DATABASE_URL")
 SQLITE_PATH = os.path.join(os.path.dirname(__file__), "hiring.db")
 
 CREATE_SQL = """
-CREATE TABLE IF NOT EXISTS candidates (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, repo_url TEXT NOT NULL, description TEXT, status TEXT DEFAULT 'submitted', scores TEXT, report TEXT, recommendation TEXT, repo_analysis TEXT, track_b_evaluation TEXT, weighted_score REAL, reviewed_by TEXT, analyzed_by TEXT, created_at TEXT, analyzed_at TEXT, demo_url TEXT);
+CREATE TABLE IF NOT EXISTS candidates (id SERIAL PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, repo_url TEXT NOT NULL, description TEXT, status TEXT DEFAULT 'submitted', scores TEXT, report TEXT, recommendation TEXT, repo_analysis TEXT, track_b_evaluation TEXT, weighted_score REAL, reviewed_by TEXT, analyzed_by TEXT, created_at TEXT, analyzed_at TEXT, demo_url TEXT, wallet_address TEXT, source TEXT DEFAULT 'manual', source_email_id TEXT, detected_at TEXT);
 
 CREATE TABLE IF NOT EXISTS monitor_candidates (id SERIAL PRIMARY KEY, github_username TEXT UNIQUE NOT NULL, profile_url TEXT, bio TEXT, public_repos INTEGER DEFAULT 0, followers INTEGER DEFAULT 0, languages TEXT, contributions TEXT, scores TEXT, activity_level TEXT, last_scanned TEXT, linkedin_url TEXT);
 

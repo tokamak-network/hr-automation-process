@@ -23,3 +23,9 @@ backend/uploads/
 
 # 발표용 pptx — 레포에 포함하지 않음
 docs/*.pptx
+
+# Gmail 읽기 자격증명·토큰 — 절대 커밋 금지 (C-1)
+backend/gmail_token.json
+backend/gmail_credentials.json
+*gmail*token*.json
+*gmail*credentials*.json

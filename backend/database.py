@@ -51,7 +51,11 @@ async def init_db():
         reviewed_by TEXT,
         analyzed_by TEXT,
         created_at TEXT DEFAULT (datetime('now')),
-        analyzed_at TEXT
+        analyzed_at TEXT,
+        wallet_address TEXT,
+        source TEXT DEFAULT 'manual',
+        source_email_id TEXT,
+        detected_at TEXT
     );
     CREATE TABLE IF NOT EXISTS monitor_candidates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -371,6 +375,21 @@ async def init_db():
         columns = [row[1] for row in await cursor.fetchall()]
         if "linkedin_url" not in columns:
             await db.execute("ALTER TABLE monitor_candidates ADD COLUMN linkedin_url TEXT")
+    except Exception:
+        pass
+
+    # Migration: C-1 email-intake columns on candidates (wallet/source/source_email_id/detected_at)
+    try:
+        cursor = await db.execute("PRAGMA table_info(candidates)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        for col, ddl in [
+            ("wallet_address", "ALTER TABLE candidates ADD COLUMN wallet_address TEXT"),
+            ("source", "ALTER TABLE candidates ADD COLUMN source TEXT DEFAULT 'manual'"),
+            ("source_email_id", "ALTER TABLE candidates ADD COLUMN source_email_id TEXT"),
+            ("detected_at", "ALTER TABLE candidates ADD COLUMN detected_at TEXT"),
+        ]:
+            if col not in columns:
+                await db.execute(ddl)
     except Exception:
         pass
 

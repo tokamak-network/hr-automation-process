@@ -20,3 +20,6 @@ backend/uploads/
 *.sqlite
 *.sqlite3
 /data/
+
+# 발표용 pptx — 레포에 포함하지 않음
+docs/*.pptx

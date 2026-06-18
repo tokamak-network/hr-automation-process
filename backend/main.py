@@ -1231,6 +1231,7 @@ class HRMemberCreate(BaseModel):
     wallet_address: str = ""
     contract_start: str = ""
     drive_folder_name: str = ""
+    tax_treatment: str = "kr_resident"
 
 class HRMemberUpdate(BaseModel):
     name: Optional[str] = None
@@ -1242,6 +1243,7 @@ class HRMemberUpdate(BaseModel):
     contract_end: Optional[str] = None
     is_active: Optional[int] = None
     drive_folder_name: Optional[str] = None
+    tax_treatment: Optional[str] = None
     name_kr: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
@@ -1385,8 +1387,8 @@ async def get_hr_member(member_id: int):
 async def create_hr_member(data: HRMemberCreate):
     db = await get_db()
     cursor = await db.execute(
-        "INSERT INTO hr_members (name, github, role, monthly_usdt, wallet_address, contract_start, drive_folder_name) VALUES (?,?,?,?,?,?,?)",
-        (data.name, data.github, data.role, data.monthly_usdt, data.wallet_address, data.contract_start, data.drive_folder_name))
+        "INSERT INTO hr_members (name, github, role, monthly_usdt, wallet_address, contract_start, drive_folder_name, tax_treatment) VALUES (?,?,?,?,?,?,?,?)",
+        (data.name, data.github, data.role, data.monthly_usdt, data.wallet_address, data.contract_start, data.drive_folder_name, data.tax_treatment))
     await db.commit()
     mid = cursor.lastrowid
     await db.close()
@@ -1559,41 +1561,187 @@ async def bulk_delete_payroll(data: dict):
     await db.close()
     return {"message": f"{len(ids)}건 삭제"}
 
+async def _ecos_rate_for_date(date_str: str) -> tuple:
+    """
+    ECOS에서 특정 날짜의 USD/KRW 종가 조회. USDT ≈ USD 1:1 가정 (명시적).
+    주말/공휴일이면 직전 영업일 종가 반환.
+    Returns (rate, actual_date_str) or raises HTTPException.
+    """
+    import httpx
+    from datetime import timedelta
+
+    ecos_key = os.getenv("ECOS_API_KEY", "")
+    if not ecos_key:
+        raise HTTPException(500, "ECOS_API_KEY not configured")
+
+    target = datetime.strptime(date_str.replace("-", ""), "%Y%m%d")
+    start = (target - timedelta(days=7)).strftime("%Y%m%d")
+    end = target.strftime("%Y%m%d")
+
+    url = f"https://ecos.bok.or.kr/api/StatisticSearch/{ecos_key}/JSON/kr/1/10/731Y003/D/{start}/{end}/0000003"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url)
+            data = resp.json()
+    except Exception as e:
+        raise HTTPException(502, f"ECOS API error: {e}")
+
+    if "StatisticSearch" not in data or not data["StatisticSearch"].get("row"):
+        raise HTTPException(404, f"환율 데이터 없음: {date_str} 기준 직전 7일 내 영업일 없음")
+
+    last = data["StatisticSearch"]["row"][-1]
+    rate_date = last["TIME"]
+    return (float(last["DATA_VALUE"]), f"{rate_date[:4]}-{rate_date[4:6]}-{rate_date[6:8]}")
+
+
+def _compute_withholding(tax_treatment: str, taxable_krw: int, num_dependents: int = 1, num_children_8_20: int = 0) -> int:
+    """
+    세금 계산 — 한 곳에 모아 방식 교체 가능하게.
+    tax_treatment 분기:
+      kr_resident → 간이세액표 100% (보수적)
+      non_resident → 세액 0 (과세 대상 아님, 단 기록은 남김)
+    추후 kr_3_3 등 추가 시 여기만 수정.
+    """
+    if tax_treatment == "non_resident":
+        return 0
+    # kr_resident (default): 간이세액표 100%
+    result = calculate_tax(taxable_krw, num_dependents=num_dependents, num_children_8_20=num_children_8_20)
+    return round(result.get("total_tax_100", 0))
+
+
 @app.post("/api/hr/payroll/recalculate")
 async def recalculate_payroll(data: dict):
-    """경비 포함하여 krw_amount / net_pay_krw 재계산"""
+    """
+    경비 포함하여 krw_amount / net_pay_krw 재계산.
+    fx_date가 주어지면 ECOS에서 해당 날짜 종가를 조회하여 krw_rate 갱신.
+    미입력 시 기존 krw_rate 유지.
+    tax_treatment에 따라 비거주자는 세액 0.
+    """
     year, month = data.get("year"), data.get("month")
+    fx_date = data.get("fx_date")  # YYYY-MM-DD or YYYYMMDD
     if not year or not month:
         raise HTTPException(400, "year, month required")
+
+    # ECOS 환율 조회 (fx_date 입력 시)
+    ecos_rate = None
+    ecos_date = None
+    if fx_date:
+        ecos_rate, ecos_date = await _ecos_rate_for_date(fx_date)
+
     db = await get_db()
     rows = await db.execute(
-        "SELECT p.id, p.member_id, p.usdt_amount, p.krw_rate FROM payrolls p WHERE p.year=? AND p.month=?",
+        "SELECT p.id, p.member_id, p.usdt_amount, p.krw_rate, p.num_dependents FROM payrolls p WHERE p.year=? AND p.month=?",
         (year, month))
-    payrolls = [dict(r) for r in await rows.fetchall()]
+    payrolls_list = [dict(r) for r in await rows.fetchall()]
+
     updated = 0
-    for p in payrolls:
-        rate = p["krw_rate"] or 0
+    for p in payrolls_list:
+        # 환율: fx_date 입력 시 ECOS 조회값, 아니면 기존값
+        rate = ecos_rate if ecos_rate else (p["krw_rate"] or 0)
         if rate <= 0:
             continue
+
+        # 멤버 tax_treatment 조회
+        m_row = await db.execute("SELECT tax_treatment FROM hr_members WHERE id=?", (p["member_id"],))
+        member = await m_row.fetchone()
+        tax_treatment = (dict(member).get("tax_treatment") or "kr_resident") if member else "kr_resident"
+
+        num_deps = p.get("num_dependents") or 1
+
         # 경비 조회
         exp_row = await db.execute(
             "SELECT COALESCE(SUM(amount_usdt), 0) as total FROM expenses WHERE member_id=? AND year=? AND month=?",
             (p["member_id"], year, month))
-        expense_usdt = (await exp_row.fetchone())["total"]
+        expense_usdt = (await exp_row.fetchone())["total"] or 0
         total_usdt = p["usdt_amount"] + expense_usdt
         krw_amount = round(total_usdt * rate)
-        # 세금은 service fee 기준 (경비는 비과세)
+
+        # 세금: Service Fee만 과세, 경비는 비과세
         service_krw = round(p["usdt_amount"] * rate)
-        tax_result = calculate_tax(service_krw)
-        tax = round(tax_result.get("total_tax_100", 0))
+        tax = _compute_withholding(tax_treatment, service_krw, num_dependents=num_deps)
         net_pay = krw_amount - tax
-        await db.execute(
-            "UPDATE payrolls SET krw_amount=?, tax_simulated=?, net_pay_krw=? WHERE id=?",
-            (krw_amount, tax, net_pay, p["id"]))
+
+        tax_src = "auto" if tax_treatment == "kr_resident" else "non_resident"
+        if ecos_rate:
+            await db.execute(
+                "UPDATE payrolls SET krw_rate=?, krw_amount=?, tax_simulated=?, net_pay_krw=?, fx_date=?, tax_source=? WHERE id=?",
+                (rate, krw_amount, tax, net_pay, ecos_date, tax_src, p["id"]))
+        else:
+            await db.execute(
+                "UPDATE payrolls SET krw_amount=?, tax_simulated=?, net_pay_krw=?, tax_source=? WHERE id=?",
+                (krw_amount, tax, net_pay, tax_src, p["id"]))
         updated += 1
+
     await db.commit()
     await db.close()
-    return {"message": f"{updated}건 재계산 완료"}
+    result = {"message": f"{updated}건 재계산 완료"}
+    if ecos_rate:
+        result["fx_rate"] = ecos_rate
+        result["fx_date"] = ecos_date
+        result["source"] = "한국은행 ECOS (USDT≈USD 1:1)"
+    return result
+
+
+@app.get("/api/hr/payroll/tax-history")
+async def get_tax_history(year: int = 2026, member_id: Optional[int] = None):
+    """
+    과세 히스토리 조회 — 월별 과세 내역 누적.
+    과세표준, 적용환율, 환율기준일, 부양가족수, tax_treatment, 세액, 실지급,
+    tax_source(auto/manual/non_resident/legacy) 포함.
+    비거주자(세액 0)도 행으로 표시.
+    """
+    db = await get_db()
+    if member_id:
+        rows = await db.execute("""
+            SELECT p.*, m.name, m.tax_treatment
+            FROM payrolls p
+            JOIN hr_members m ON p.member_id = m.id
+            WHERE p.year = ? AND p.member_id = ?
+            ORDER BY p.month ASC
+        """, (year, member_id))
+    else:
+        rows = await db.execute("""
+            SELECT p.*, m.name, m.tax_treatment
+            FROM payrolls p
+            JOIN hr_members m ON p.member_id = m.id
+            WHERE p.year = ?
+            ORDER BY m.name, p.month ASC
+        """, (year,))
+    payrolls_list = [dict(r) for r in await rows.fetchall()]
+    await db.close()
+
+    history = []
+    for p in payrolls_list:
+        history.append({
+            "id": p["id"],
+            "name": p["name"],
+            "member_id": p["member_id"],
+            "year": p["year"],
+            "month": p["month"],
+            "usdt_amount": p["usdt_amount"],
+            "krw_rate": p["krw_rate"],
+            "fx_date": p.get("fx_date"),
+            "krw_amount": p["krw_amount"],
+            "num_dependents": p.get("num_dependents") or 1,
+            "tax_treatment": p.get("tax_treatment") or "kr_resident",
+            "tax_simulated": p["tax_simulated"],
+            "tax_source": p.get("tax_source") or "legacy",
+            "net_pay_krw": p["net_pay_krw"],
+            "status": p["status"],
+        })
+
+    # 연간 누적 요약
+    summary = {}
+    for h in history:
+        name = h["name"]
+        if name not in summary:
+            summary[name] = {"name": name, "tax_treatment": h["tax_treatment"],
+                             "total_tax": 0, "total_net": 0, "months": 0}
+        summary[name]["total_tax"] += (h["tax_simulated"] or 0)
+        summary[name]["total_net"] += (h["net_pay_krw"] or 0)
+        summary[name]["months"] += 1
+
+    return {"year": year, "history": history, "annual_summary": list(summary.values())}
 
 @app.post("/api/hr/payroll/confirm")
 async def confirm_payroll(data: PayrollConfirm):
@@ -2468,8 +2616,9 @@ async def delete_hr_transaction(tx_id: int):
 async def upload_payroll_history(file: UploadFile = File(...)):
     """
     급여이력 일괄 업로드.
-    엑셀 컬럼: 연도, 월, 이름, USDT, 환율(선택), 세금(선택)
+    엑셀 컬럼: 연도, 월, 이름, USDT, 환율(선택), 세금(선택), 부양가족수(선택)
     환율/세금 없으면 0으로 저장, 상태는 paid.
+    부양가족수 없으면 기본값 1 + 경고 표시 (조용히 넘기지 않음).
     """
     import openpyxl, io
 
@@ -2479,14 +2628,14 @@ async def upload_payroll_history(file: UploadFile = File(...)):
 
     db = await get_db()
     added, updated, skipped = 0, 0, 0
+    dependents_missing = []  # 부양가족수 누락 행 추적
 
     import re
 
-    for row in ws.iter_rows(min_row=2, values_only=True):
+    for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         if not row[0] or not row[2]:
             continue
         year = int(row[0])
-        # "1월", "01", 1 등 다양한 형식 처리
         month_raw = str(row[1]).strip()
         month_digits = re.sub(r"[^0-9]", "", month_raw)
         if not month_digits:
@@ -2495,14 +2644,41 @@ async def upload_payroll_history(file: UploadFile = File(...)):
         name = str(row[2]).strip()
         usdt = float(row[3] or 0)
         rate = float(row[4]) if len(row) > 4 and row[4] else 0
-        tax = float(row[5]) if len(row) > 5 and row[5] else 0
+        tax_override = float(row[5]) if len(row) > 5 and row[5] else None
+
+        # 부양가족수: 7번째 컬럼 (index 6). 없으면 기본값 1 + 경고
+        num_deps = 1
+        deps_provided = False
+        if len(row) > 6 and row[6] is not None and str(row[6]).strip() != "":
+            num_deps = int(row[6])
+            deps_provided = True
+        else:
+            dependents_missing.append(f"행{row_idx} {name} ({year}-{month:02d})")
 
         krw = round(usdt * rate) if rate else 0
+
+        # 세금: 직접 입력 있으면 그 값(manual), 없으면 계산(auto/non_resident)
+        tax_src = "none"
+        if tax_override is not None:
+            tax = round(tax_override)
+            tax_src = "manual"
+        elif krw > 0:
+            m_row = await db.execute("SELECT id, tax_treatment FROM hr_members WHERE name=?", (name,))
+            m_info = await m_row.fetchone()
+            if m_info:
+                treatment = dict(m_info).get("tax_treatment") or "kr_resident"
+                tax = _compute_withholding(treatment, krw, num_dependents=num_deps)
+                tax_src = "auto" if treatment == "kr_resident" else "non_resident"
+            else:
+                tax = 0
+        else:
+            tax = 0
+
         net = krw - tax if krw else 0
 
         # 이름으로 멤버 매칭
-        r = await db.execute("SELECT id FROM hr_members WHERE name=?", (name,))
-        member = await r.fetchone()
+        r_member = await db.execute("SELECT id FROM hr_members WHERE name=?", (name,))
+        member = await r_member.fetchone()
         if not member:
             skipped += 1
             continue
@@ -2513,18 +2689,22 @@ async def upload_payroll_history(file: UploadFile = File(...)):
 
         if ex:
             await db.execute(
-                "UPDATE payrolls SET usdt_amount=?, krw_rate=?, krw_amount=?, tax_simulated=?, net_pay_krw=?, status='paid' WHERE id=?",
-                (usdt, rate, krw, tax, net, ex["id"]))
+                "UPDATE payrolls SET usdt_amount=?, krw_rate=?, krw_amount=?, tax_simulated=?, net_pay_krw=?, num_dependents=?, tax_source=?, status='paid' WHERE id=?",
+                (usdt, rate, krw, tax, net, num_deps, tax_src, ex["id"]))
             updated += 1
         else:
             await db.execute(
-                "INSERT INTO payrolls (member_id, year, month, usdt_amount, krw_rate, krw_amount, tax_simulated, reserve_tokamak, net_pay_krw, status) VALUES (?,?,?,?,?,?,?,0,?,?)",
-                (mid, year, month, usdt, rate, krw, tax, net, "paid"))
+                "INSERT INTO payrolls (member_id, year, month, usdt_amount, krw_rate, krw_amount, tax_simulated, reserve_tokamak, net_pay_krw, num_dependents, tax_source, status) VALUES (?,?,?,?,?,?,?,0,?,?,?,?)",
+                (mid, year, month, usdt, rate, krw, tax, net, num_deps, tax_src, "paid"))
             added += 1
 
     await db.commit()
     await db.close()
-    return {"added": added, "updated": updated, "skipped": skipped, "message": f"{added}건 추가, {updated}건 업데이트, {skipped}건 스킵"}
+    result = {"added": added, "updated": updated, "skipped": skipped,
+              "message": f"{added}건 추가, {updated}건 업데이트, {skipped}건 스킵"}
+    if dependents_missing:
+        result["warnings"] = [f"부양가족수 누락 (기본값 1 적용): {', '.join(dependents_missing)}"]
+    return result
 
 
 @app.get("/api/hr/payroll/upload-template")
@@ -2541,15 +2721,15 @@ async def download_payroll_upload_template():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "급여이력"
-    ws.append(["연도", "월", "이름", "USDT", "환율", "세금(KRW)"])
+    ws.append(["연도", "월", "이름", "USDT", "환율", "세금(KRW)", "부양가족수"])
 
     # 샘플: 현재 연월 한 줄씩
     from datetime import datetime as dt
     now = dt.now()
     for m in members:
-        ws.append([now.year, now.month, m, 0, 0, 0])
+        ws.append([now.year, now.month, m, 0, 0, 0, 1])
 
-    for col, w in [("A",8),("B",6),("C",15),("D",12),("E",10),("F",12)]:
+    for col, w in [("A",8),("B",6),("C",15),("D",12),("E",10),("F",12),("G",12)]:
         ws.column_dimensions[col].width = w
 
     buf = io.BytesIO()
@@ -2566,13 +2746,19 @@ async def calculate_payroll_preview(file: UploadFile = File(...)):
     """
     엑셀 업로드 → 미리보기 (저장 안 함).
     엑셀 컬럼: 이름, USDT, 환율, 부양가족수(기본1), 8-20세자녀수(기본0)
+    세금 경로: _compute_withholding() 단일화 (tax_treatment 반영).
     """
     import openpyxl, io
-    from tax_calculator import calculate_tax
 
     content = await file.read()
     wb = openpyxl.load_workbook(io.BytesIO(content))
     ws = wb.active
+
+    # 멤버별 tax_treatment 조회
+    db = await get_db()
+    m_rows = await db.execute("SELECT name, tax_treatment FROM hr_members WHERE is_active=1")
+    member_treatment = {dict(r)["name"]: dict(r).get("tax_treatment") or "kr_resident" for r in await m_rows.fetchall()}
+    await db.close()
 
     results = []
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -2585,8 +2771,9 @@ async def calculate_payroll_preview(file: UploadFile = File(...)):
         children = int(row[4]) if len(row) > 4 and row[4] else 0
 
         krw = round(usdt * rate)
-        tax_result = calculate_tax(krw, dependents, children)
-        tax = tax_result["total_tax_100"]
+        treatment = member_treatment.get(name, "kr_resident")
+        # 단일 세금 경로: _compute_withholding()
+        tax = _compute_withholding(treatment, krw, num_dependents=dependents, num_children_8_20=children)
         net = krw - tax
 
         results.append({
@@ -2594,12 +2781,11 @@ async def calculate_payroll_preview(file: UploadFile = File(...)):
             "usdt_amount": usdt,
             "krw_rate": rate,
             "krw_amount": krw,
-            "income_tax": tax_result["income_tax_100"],
-            "local_tax": tax_result["local_tax_100"],
             "tax_total": tax,
             "net_pay_krw": net,
             "dependents": dependents,
             "children": children,
+            "tax_treatment": treatment,
         })
 
     return {"results": results}
@@ -2629,14 +2815,16 @@ async def calculate_payroll_save(data: dict):
         existing = await db.execute("SELECT id FROM payrolls WHERE member_id=? AND year=? AND month=?", (mid, year, month))
         ex = await existing.fetchone()
 
+        deps = r.get("dependents", 1)
+        tax_src = "auto" if r.get("tax_treatment", "kr_resident") == "kr_resident" else "non_resident"
         if ex:
             await db.execute(
-                "UPDATE payrolls SET usdt_amount=?, krw_rate=?, krw_amount=?, tax_simulated=?, net_pay_krw=?, status=? WHERE id=?",
-                (r["usdt_amount"], r["krw_rate"], r["krw_amount"], r["tax_total"], r["net_pay_krw"], status, ex["id"]))
+                "UPDATE payrolls SET usdt_amount=?, krw_rate=?, krw_amount=?, tax_simulated=?, net_pay_krw=?, num_dependents=?, tax_source=?, status=? WHERE id=?",
+                (r["usdt_amount"], r["krw_rate"], r["krw_amount"], r["tax_total"], r["net_pay_krw"], deps, tax_src, status, ex["id"]))
         else:
             await db.execute(
-                "INSERT INTO payrolls (member_id, year, month, usdt_amount, krw_rate, krw_amount, tax_simulated, reserve_tokamak, net_pay_krw, status) VALUES (?,?,?,?,?,?,?,0,?,?)",
-                (mid, year, month, r["usdt_amount"], r["krw_rate"], r["krw_amount"], r["tax_total"], r["net_pay_krw"], status))
+                "INSERT INTO payrolls (member_id, year, month, usdt_amount, krw_rate, krw_amount, tax_simulated, reserve_tokamak, net_pay_krw, num_dependents, tax_source, status) VALUES (?,?,?,?,?,?,?,0,?,?,?,?)",
+                (mid, year, month, r["usdt_amount"], r["krw_rate"], r["krw_amount"], r["tax_total"], r["net_pay_krw"], deps, tax_src, status))
         saved += 1
 
     await db.commit()
@@ -2964,7 +3152,8 @@ async def tokamak_price():
 
 @app.get("/api/hr/market/usdt")
 async def usdt_rate():
-    return {"pair": "USDT/KRW", "rate": 1352.50, "source": "mock", "timestamp": datetime.now().isoformat()}
+    """MOCK 시세 — 표시용 참고값. 과세 계산에는 ECOS 환율 사용(recalculate fx_date)."""
+    return {"pair": "USDT/KRW", "rate": 1352.50, "source": "mock (참고용, 과세에 미사용)", "timestamp": datetime.now().isoformat()}
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -32,3 +32,6 @@ backend/gmail_credentials.json
 
 # 클라우드(실데이터) 1회성 접속 스크립트 — 비추적 (운영 DB 접근 도구)
 backend/run-cloud.sh
+
+# Gmail 토큰 발급 스크립트 — 비추적 (1회용 OAuth 도구)
+backend/gen-gmail-token.py

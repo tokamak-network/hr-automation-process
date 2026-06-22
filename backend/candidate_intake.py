@@ -28,6 +28,30 @@ logger = logging.getLogger("candidate_intake")
 
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY", "")
 
+
+def _parse_csv_lower(s: str) -> set:
+    return {x.strip().lower() for x in (s or "").split(",") if x.strip()}
+
+
+# 내부(우리 측) 발신자 — 후보 감지에서 제외. .env 로 설정 가능(하드코딩 아님).
+# 스레드에서 우리가 답장한 메일은 발신자=우리이므로 여기서 걸러진다.
+INTERNAL_DOMAINS = _parse_csv_lower(os.getenv("INTAKE_INTERNAL_DOMAINS", "tokamak.network"))
+INTERNAL_EMAILS = _parse_csv_lower(
+    os.getenv("INTAKE_INTERNAL_EMAILS", "hr@tokamak.network,jaden@tokamak.network")
+)
+
+
+def is_internal_sender(email_addr: str) -> bool:
+    """발신자가 우리 측(내부)이면 True → 후보 감지 제외.
+    개별 주소(INTAKE_INTERNAL_EMAILS) 또는 도메인(INTAKE_INTERNAL_DOMAINS) 일치."""
+    e = (email_addr or "").strip().lower()
+    if not e:
+        return False
+    if e in INTERNAL_EMAILS:
+        return True
+    domain = e.split("@")[-1] if "@" in e else ""
+    return bool(domain) and domain in INTERNAL_DOMAINS
+
 # github.com/{owner}/{repo} — 쿼리/경로 꼬리는 잘라 owner/repo 까지만.
 _GITHUB_RE = re.compile(r"https?://(?:www\.)?github\.com/([A-Za-z0-9](?:[A-Za-z0-9-]{0,38})?)/([A-Za-z0-9_.-]+)", re.I)
 
@@ -123,6 +147,10 @@ async def process_message(db, msg: Dict) -> Dict:
     sender_name, _ = parseaddr(msg.get("sender", ""))
     msg_id = str(msg.get("id", "") or "")
 
+    # 우리 측(내부) 발신자는 후보 대상 아님 — 스레드에서 우리가 답장한 메일 제외.
+    if is_internal_sender(email_addr):
+        return {"action": "excluded", "reason": "internal sender", "sender_email": email_addr}
+
     cls = await classify_message(msg)
     if cls["signal"] == "excluded":
         return {"action": "excluded", "reason": "no repo/wallet", **cls}
@@ -173,10 +201,13 @@ async def process_message(db, msg: Dict) -> Dict:
 
 async def process_messages(db, messages: List[Dict]) -> Dict:
     """여러 메일을 누적 처리하고 요약 반환. (등록·회신 없음)"""
-    summary = {"created": 0, "updated": 0, "duplicate": 0, "excluded": 0, "wallet_filled": 0}
+    summary = {"created": 0, "updated": 0, "duplicate": 0, "excluded": 0,
+               "excluded_internal": 0, "wallet_filled": 0}
     for msg in messages or []:
         res = await process_message(db, msg)
         summary[res["action"]] = summary.get(res["action"], 0) + 1
+        if res.get("reason") == "internal sender":
+            summary["excluded_internal"] += 1
         if res.get("wallet_filled"):
             summary["wallet_filled"] += 1
     return summary

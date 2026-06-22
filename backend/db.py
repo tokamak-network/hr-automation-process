@@ -9,9 +9,11 @@ import aiosqlite
 from dotenv import load_dotenv
 
 load_dotenv()
-# 로컬 개발 override — .env 다음에 backend/.env.local 을 우선 적용(있을 때만).
-# 운영 배포엔 .env.local 이 없으므로 무영향(플랫폼 env의 DATABASE_URL 유지).
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env.local"), override=True)
+# 로컬 개발 override — .env 다음에 backend/.env.local 을 적용(로컬 기본값).
+# 단, 환경에 DATABASE_URL 이 이미 주어진 경우(run-cloud.sh 인라인 주입 / 운영 플랫폼 env)
+# 에는 그 명시 주입을 존중하고 .env.local override 를 건너뛴다.
+if not os.getenv("DATABASE_URL"):
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env.local"), override=True)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 DB_PATH = os.path.join(os.path.dirname(__file__), "hiring.db")

@@ -27,9 +27,9 @@ CREATE TABLE IF NOT EXISTS team_profiles (id SERIAL PRIMARY KEY, github_username
 
 CREATE TABLE IF NOT EXISTS outreach_history (id SERIAL PRIMARY KEY, candidate_id INTEGER NOT NULL, candidate_type TEXT DEFAULT 'linkedin', template_used TEXT, message_sent TEXT, channel TEXT DEFAULT 'linkedin_dm', status TEXT DEFAULT 'sent', sent_at TEXT, sent_by TEXT);
 
-CREATE TABLE IF NOT EXISTS hr_members (id SERIAL PRIMARY KEY, name TEXT NOT NULL, github TEXT, role TEXT NOT NULL, monthly_usdt REAL NOT NULL, wallet_address TEXT, contract_start TEXT, is_active INTEGER DEFAULT 1, created_at TEXT, contract_end TEXT, name_kr TEXT, email TEXT, phone TEXT, personal_email TEXT, birthday TEXT, education TEXT, nationality TEXT, is_rnd TEXT, address TEXT, company TEXT);
+CREATE TABLE IF NOT EXISTS hr_members (id SERIAL PRIMARY KEY, name TEXT NOT NULL, github TEXT, role TEXT NOT NULL, monthly_usdt REAL NOT NULL, wallet_address TEXT, contract_start TEXT, is_active INTEGER DEFAULT 1, created_at TEXT, contract_end TEXT, name_kr TEXT, email TEXT, phone TEXT, personal_email TEXT, birthday TEXT, education TEXT, nationality TEXT, is_rnd TEXT, address TEXT, company TEXT, drive_folder_name TEXT, tax_treatment TEXT DEFAULT 'kr_resident');
 
-CREATE TABLE IF NOT EXISTS payrolls (id SERIAL PRIMARY KEY, member_id INTEGER NOT NULL, year INTEGER NOT NULL, month INTEGER NOT NULL, usdt_amount REAL NOT NULL, krw_rate REAL NOT NULL, krw_amount REAL NOT NULL, tax_simulated REAL DEFAULT 0, reserve_tokamak REAL DEFAULT 0, net_pay_krw REAL DEFAULT 0, status TEXT DEFAULT 'estimated', created_at TEXT, confirmed_at TEXT, paid_at TEXT, tx_hash TEXT);
+CREATE TABLE IF NOT EXISTS payrolls (id SERIAL PRIMARY KEY, member_id INTEGER NOT NULL, year INTEGER NOT NULL, month INTEGER NOT NULL, usdt_amount REAL NOT NULL, krw_rate REAL NOT NULL, krw_amount REAL NOT NULL, tax_simulated REAL DEFAULT 0, reserve_tokamak REAL DEFAULT 0, net_pay_krw REAL DEFAULT 0, status TEXT DEFAULT 'estimated', created_at TEXT, confirmed_at TEXT, paid_at TEXT, tx_hash TEXT, fx_date TEXT, num_dependents INTEGER DEFAULT 1, tax_source TEXT);
 
 CREATE TABLE IF NOT EXISTS incentives (id SERIAL PRIMARY KEY, member_id INTEGER NOT NULL, year INTEGER NOT NULL, quarter INTEGER NOT NULL, tokamak_amount REAL NOT NULL, tokamak_krw_rate REAL NOT NULL, krw_amount REAL NOT NULL, status TEXT DEFAULT 'pending', created_at TEXT);
 
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS hr_wallets (id SERIAL PRIMARY KEY, label TEXT NOT NUL
 
 CREATE TABLE IF NOT EXISTS member_wallets (id SERIAL PRIMARY KEY, member_id INTEGER NOT NULL, label TEXT NOT NULL, address TEXT NOT NULL, chain TEXT DEFAULT 'ERC-20', created_at TEXT);
 
-CREATE TABLE IF NOT EXISTS expenses (id SERIAL PRIMARY KEY, member_id INTEGER NOT NULL, year INTEGER NOT NULL, month INTEGER NOT NULL, amount_usdt REAL NOT NULL, category TEXT NOT NULL, description TEXT, tx_hash TEXT, status TEXT DEFAULT 'pending', expense_date TEXT, created_at TEXT, memo TEXT);
+CREATE TABLE IF NOT EXISTS expenses (id SERIAL PRIMARY KEY, member_id INTEGER NOT NULL, year INTEGER NOT NULL, month INTEGER NOT NULL, amount_usdt REAL, category TEXT NOT NULL, description TEXT, tx_hash TEXT, status TEXT DEFAULT 'pending', expense_date TEXT, created_at TEXT, memo TEXT, vendor TEXT, amount_original REAL, currency_original TEXT, fx_date_estimate TEXT, fx_rate_estimate REAL, amount_usdt_estimate REAL, fx_date_confirmed TEXT, fx_rate_confirmed REAL, amount_usdt_confirmed REAL, evidence_status TEXT, evidence_ref TEXT, flags TEXT, decided_by TEXT, decided_at TEXT, updated_at TEXT);
 
 CREATE TABLE IF NOT EXISTS fiat_transactions (id SERIAL PRIMARY KEY, tx_id TEXT, source TEXT, direction TEXT, status TEXT, amount REAL, currency TEXT, counterparty TEXT, category TEXT, reference TEXT, note TEXT, exchange_rate REAL, balance REAL, tx_date TEXT, created_at TEXT, fee_amount REAL DEFAULT 0, fee_currency REAL DEFAULT 0, gross_amount REAL DEFAULT 0);
 

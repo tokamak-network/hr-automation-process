@@ -3945,13 +3945,22 @@ async def ingest_expenses(data: ExpenseIngestBody, request: Request):
         await db.close()
         raise HTTPException(400, "period must be YYYY-MM")
 
-    # Build folder→member_id lookup
+    # Build submitter→member_id lookup.
+    # Match on either the explicit drive_folder_name OR the member's display name
+    # (the name shown at the top of the member card), case-insensitively.
     members_rows = await db.execute("SELECT id, name, drive_folder_name FROM hr_members WHERE is_active=1")
     members = [dict(r) for r in await members_rows.fetchall()]
+
+    def _norm_key(s):
+        return s.strip().casefold() if s else None
+
     folder_map = {}
     for m in members:
+        # drive_folder_name takes precedence; display name added as a fallback alias
         if m.get("drive_folder_name"):
-            folder_map[m["drive_folder_name"]] = m["id"]
+            folder_map[_norm_key(m["drive_folder_name"])] = m["id"]
+        if m.get("name"):
+            folder_map.setdefault(_norm_key(m["name"]), m["id"])
 
     inserted = 0
     skipped = 0
@@ -3961,8 +3970,8 @@ async def ingest_expenses(data: ExpenseIngestBody, request: Request):
     for row in data.rows:
         flags = row.flags or ""
 
-        # Map submitter → member_id
-        member_id = folder_map.get(row.submitter)
+        # Map submitter → member_id (drive_folder_name or display name, case-insensitive)
+        member_id = folder_map.get(_norm_key(row.submitter))
         status = "pending"
         if member_id is None:
             # Mapping failure — flag it, DO NOT assign to wrong member

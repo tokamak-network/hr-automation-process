@@ -273,9 +273,9 @@ export default function ClassifierPage() {
               <p>법인 은행 거래내역(Aspire, WISE)을 <strong>회계 계정</strong>에 자동으로 분류하는 기능입니다.</p>
               <p>예를 들어:</p>
               <ul>
-                <li>"Customer A"로부터 입금 → <strong>Sales</strong> (매출)</li>
+                <li>"고객사 A"로부터 입금 → <strong>Sales</strong> (매출)</li>
                 <li>"Anthropic"에 출금 → <strong>Subscription fee</strong> (구독료)</li>
-                <li>"Member 5"에 출금 → <strong>Salary</strong> (급여)</li>
+                <li>"직원 A"에 출금 → <strong>Salary</strong> (급여)</li>
               </ul>
 
               <h3>핵심 개념</h3>
@@ -285,8 +285,8 @@ export default function ClassifierPage() {
               <table>
                 <thead><tr><th>구분</th><th>계정</th><th>설명</th></tr></thead>
                 <tbody>
-                  <tr><td>수입</td><td>Sales</td><td>Customer A 매출</td></tr>
-                  <tr><td>원가</td><td>Consulting fee</td><td>Vendor B 외주비</td></tr>
+                  <tr><td>수입</td><td>Sales</td><td>고객사 A 매출</td></tr>
+                  <tr><td>원가</td><td>Consulting fee</td><td>외주사 B 외주비</td></tr>
                   <tr><td>비용</td><td>Salary</td><td>직원 급여</td></tr>
                   <tr><td></td><td>Director remuneration</td><td>이사 보수</td></tr>
                   <tr><td></td><td>Subscription fee</td><td>SaaS 구독</td></tr>

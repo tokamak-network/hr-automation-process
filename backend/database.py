@@ -147,11 +147,12 @@ async def init_db():
     """)
 
     # Pre-populate users and team_skills
+    # 더미 시드(신규 DB 초기값). 실운영 데이터는 클라우드/로컬 DB에 별도 존재.
     team_data = [
-        ("Member 1", "kevin@tokamak.network", "admin", "member-1", "protocol,tokenomics,smart-contracts,ethereum,solidity"),
-        ("Member 2", "jaden@tokamak.network", "reviewer", "member-2", "fullstack,ops,devops,typescript,javascript,python"),
-        ("Member 3", "mehdi@tokamak.network", "reviewer", "member-3", "frontend,react,typescript,javascript,css,ui"),
-        ("Member 4", "jason@tokamak.network", "reviewer", "member-4", "l2,bridge,rollup,ethereum,solidity,typescript"),
+        ("Admin User", "admin@example.com", "admin", "admin-handle", "protocol,tokenomics,smart-contracts,ethereum,solidity"),
+        ("Reviewer A", "reviewer-a@example.com", "reviewer", "reviewer-a", "fullstack,ops,devops,typescript,javascript,python"),
+        ("Reviewer B", "reviewer-b@example.com", "reviewer", "reviewer-b", "frontend,react,typescript,javascript,css,ui"),
+        ("Reviewer C", "reviewer-c@example.com", "reviewer", "reviewer-c", "l2,bridge,rollup,ethereum,solidity,typescript"),
     ]
 
     for name, email, role, github, skills in team_data:
@@ -315,8 +316,8 @@ async def init_db():
     if row[0] == 0:
         import random
         hr_members = [
-            ("Member 1", "member-1", "CEO / Representative", 15000, "0x1a2b3c4d5e6f7890abcdef1234567890abcdef01", "2020-01-01"),
-            ("Member 2", "member-2", "Directing Manager", 12000, "0x2b3c4d5e6f7890abcdef1234567890abcdef0102", "2020-03-15"),
+            ("Alex Park", "alex-ceo", "CEO / Representative", 15000, "0x1a2b3c4d5e6f7890abcdef1234567890abcdef01", "2020-01-01"),
+            ("Sam Lee", "sam-mgr", "Directing Manager", 12000, "0x2b3c4d5e6f7890abcdef1234567890abcdef0102", "2020-03-15"),
             ("Sujin Park", "sujin-park", "Senior Developer", 10000, "0x3c4d5e6f7890abcdef1234567890abcdef010203", "2021-06-01"),
             ("Minho Lee", "minho-dev", "Backend Developer", 9000, "0x4d5e6f7890abcdef1234567890abcdef01020304", "2022-01-10"),
             ("Yuna Kim", "yuna-kim", "Frontend Developer", 9000, "0x5e6f7890abcdef1234567890abcdef0102030405", "2022-04-01"),

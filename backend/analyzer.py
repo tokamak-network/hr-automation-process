@@ -10,11 +10,26 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TEAM_MEMBERS = {
-    "member-7", "member-4", "member-8", "member-9", "member-2",
-    "member-5", "member-10", "member-11", "member-1", "member-3", "member-12",
-    "member-13", "member-14", "member-15", "member-16", "member-17"
-}
+def _load_team_members() -> set:
+    """팀원 GitHub 핸들 목록을 코드 밖에서 로드 (실데이터를 public repo에 두지 않음).
+    우선순위: 환경변수 TEAM_MEMBERS(콤마 구분) → backend/team_members.json(gitignore).
+    설정이 없으면 빈 집합 → 리뷰어 매칭 등은 조용히 비어 동작(크래시 없음)."""
+    env = os.getenv("TEAM_MEMBERS", "")
+    if env.strip():
+        return {h.strip() for h in env.split(",") if h.strip()}
+    path = os.path.join(os.path.dirname(__file__), "team_members.json")
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            members = data if isinstance(data, list) else data.get("members", [])
+            return {str(m).strip() for m in members if str(m).strip()}
+        except Exception:
+            pass
+    return set()
+
+
+TEAM_MEMBERS = _load_team_members()
 
 LANG_EXTENSIONS = {
     ".py": "Python", ".js": "JavaScript", ".ts": "TypeScript", ".tsx": "TypeScript",

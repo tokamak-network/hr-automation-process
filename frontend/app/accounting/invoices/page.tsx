@@ -178,7 +178,7 @@ export default function InvoicesPage() {
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">거래상대</label>
                 <input value={form.counterparty} onChange={e => setForm({ ...form, counterparty: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Customer A" />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="예: ABC Corp" />
               </div>
               <div className="col-span-2">
                 <label className="text-xs font-medium text-gray-500 mb-1 block">내용</label>

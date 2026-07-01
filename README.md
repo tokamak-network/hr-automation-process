@@ -99,10 +99,10 @@ tokamak-hr/
 
 | 팀원 | 전문 분야 |
 |------|-----------|
-| Member 1 (member-1) | Protocol, Tokenomics, Architecture |
-| Member 2 (member-2) | Full-stack, Ops, Blockchain |
-| Member 3 (member-3) | Frontend, UI/UX |
-| Member 4 (member-4) | L2, Bridge, Core Protocol |
+| Reviewer A | Protocol, Tokenomics, Architecture |
+| Reviewer B | Full-stack, Ops, Blockchain |
+| Reviewer C | Frontend, UI/UX |
+| Reviewer D | L2, Bridge, Core Protocol |
 
 ### 5. 다중 사용자 지원
 - 관리자/리뷰어/뷰어 역할 분리

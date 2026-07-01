@@ -122,7 +122,7 @@ Cowork는 Drive **폴더명**으로 제출자를 식별, `expenses`는 `member_i
 
 ## §8. 검증 시나리오 (구현 후)
 
-1. 6월 Member 3 €216 영수증 1건을 `/api/hr/expenses/ingest`로 적재 → 폴더명 "Member 3"가 member_id로 매핑되는가, 추산 USDT가 결제일 종가로 채워지는가.
+1. 6월 Member A €216 영수증 1건을 `/api/hr/expenses/ingest`로 적재 → 폴더명 "Member A"가 member_id로 매핑되는가, 추산 USDT가 결제일 종가로 채워지는가.
 2. 승인 화면에서 그 건 "지급"(payment_date=2026-06-16) → 확정 USDT가 D-1(6/12) 종가로 기록되는가, 송금 호출 0건인가.
 3. **경비 정산 화면 6월을 열어 그 건이 보이는가** ← 통합 성공의 결정적 증거.
 4. 매핑 실패 테스트: 존재하지 않는 폴더명 "Unknown"으로 ingest → 보류 처리되고 엉뚱한 멤버에 안 붙는가.

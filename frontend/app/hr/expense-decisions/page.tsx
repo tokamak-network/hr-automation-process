@@ -111,7 +111,7 @@ export default function ExpenseDecisionsPage() {
 
   const INGEST_EXAMPLE = `[
   {
-    "submitter": "Member 3",
+    "submitter": "Member A",
     "vendor": "AWS",
     "item": "EC2 6월",
     "category": "인프라",

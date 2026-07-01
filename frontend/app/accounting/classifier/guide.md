@@ -8,9 +8,9 @@
 법인 은행 거래내역(Aspire, WISE)을 **회계 계정**에 자동으로 분류하는 기능입니다.
 
 예를 들어:
-- "Customer A"로부터 입금 → **Sales** (매출)
+- "고객사 A"로부터 입금 → **Sales** (매출)
 - "Anthropic"에 출금 → **Subscription fee** (구독료)
-- "Member 5"에 출금 → **Salary** (급여)
+- "직원 A"에 출금 → **Salary** (급여)
 
 매년 가결산 시 거래 하나하나를 수동으로 분류하던 작업을 자동화합니다.
 
@@ -24,8 +24,8 @@
 
 | 구분 | 계정 | 설명 |
 |------|------|------|
-| **수입** | Sales | Customer A 매출 |
-| **원가** | Consulting fee | Vendor B 외주비 |
+| **수입** | Sales | 고객사 A 매출 |
+| **원가** | Consulting fee | 외주사 B 외주비 |
 | **비용** | Salary | 직원 급여 |
 | | Director remuneration | 이사 보수 |
 | | Subscription fee | SaaS 구독 (Anthropic, GitHub 등) |
@@ -45,7 +45,7 @@
 ```
 "Anthropic" → Subscription fee
 "OpenAI"    → Subscription fee
-"Vendor C" → Professional fee
+"법무법인 C" → Professional fee
 ```
 
 한 번 등록하면 같은 거래상대의 모든 거래가 자동 분류됩니다.
@@ -55,7 +55,7 @@
 한국 거주자에게 송금 시 원천세 검토가 필요할 수 있습니다.
 룰에 WHT 플래그가 설정된 거래는 빨간색으로 경고 표시됩니다.
 
-해당 거래: Vendor B, Vendor C, Vendor D 등
+해당 거래: 외주사 B, 법무법인 C, 세무사 D 등
 
 ---
 

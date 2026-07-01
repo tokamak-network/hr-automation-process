@@ -41,3 +41,6 @@ start-local.sh
 
 # FUSE 임시 아티팩트
 .fuse_hidden*
+
+# 팀원 GitHub 핸들 (실데이터) — 코드 밖으로 외부화, 커밋 금지
+backend/team_members.json

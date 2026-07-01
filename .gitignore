@@ -44,3 +44,6 @@ start-local.sh
 
 # 팀원 GitHub 핸들 (실데이터) — 코드 밖으로 외부화, 커밋 금지
 backend/team_members.json
+
+# 이력 정리용 치환 규칙(실데이터 포함) — 커밋 금지, 작업 후 삭제
+replace-rules.txt

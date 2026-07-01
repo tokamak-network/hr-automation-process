@@ -41,7 +41,8 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy"}
+    from db import db_mode
+    return {"status": "healthy", **db_mode()}
 
 
 def get_user_email(request: Request) -> Optional[str]:

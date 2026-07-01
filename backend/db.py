@@ -31,6 +31,17 @@ def _is_local_host(url: str) -> bool:
     return h in ("", "localhost", "127.0.0.1", "::1")
 
 
+def db_mode() -> dict:
+    """현재 백엔드가 붙은 DB의 모드 — 로그·health·프론트 배지에서 공용으로 쓴다."""
+    from urllib.parse import urlparse
+    if not USE_PG:
+        return {"mode": "local", "engine": "sqlite", "host": "sqlite", "label": "로컬 (SQLite)"}
+    host = urlparse(DATABASE_URL).hostname or ""
+    if _is_local_host(DATABASE_URL):
+        return {"mode": "local", "engine": "postgres", "host": host, "label": "로컬 (테스트 DB)"}
+    return {"mode": "cloud", "engine": "postgres", "host": host, "label": "클라우드 (실데이터)"}
+
+
 # C가드 — 비로컬(운영 Supabase 등) DB로의 실수 연결 방지.
 # 호스트가 로컬이 아니면 ALLOW_PROD_DB=1 이 없는 한 즉시 중단.
 # ALLOW_PROD_DB 는 운영 플랫폼 env 에만 둔다(로컬 .env/.env.local 금지).
@@ -173,9 +184,19 @@ async def _pg_migrate():
 
 async def init_db():
     """Initialize database. For PostgreSQL, tables are created via migration script."""
+    m = db_mode()
+    bar = "=" * 64
+    icon = "🟢" if m["mode"] == "local" else "🔴"
+    print(f"\n{bar}")
+    print(f"  {icon}  DB 모드: {m['label']}   (host={m['host']})")
+    if m["mode"] == "cloud":
+        print("  ⚠️  클라우드(실데이터)입니다 — 이 화면의 변경은 운영에 즉시 반영됩니다.")
+    else:
+        print("  로컬 테스트 DB. 클라우드(실데이터) 미연결.")
+    print(f"{bar}\n")
+
     if USE_PG:
         # Tables already created by migrate_to_pg.py
-        print(f"Using PostgreSQL: {DATABASE_URL[:40]}...")
         await _pg_migrate()
         return
 

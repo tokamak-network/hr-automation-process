@@ -35,3 +35,9 @@ backend/run-cloud.sh
 
 # Gmail 토큰 발급 스크립트 — 비추적 (1회용 OAuth 도구)
 backend/gen-gmail-token.py
+
+# 로컬 전용 기동 스크립트 — 비추적 (개인 편의)
+start-local.sh
+
+# FUSE 임시 아티팩트
+.fuse_hidden*

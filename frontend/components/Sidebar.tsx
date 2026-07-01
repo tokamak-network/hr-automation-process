@@ -1,5 +1,6 @@
 "use client";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -43,6 +44,12 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
 
+  // 지금 보는 데이터가 로컬(테스트)인지 클라우드(실데이터)인지 표시
+  const [dbMode, setDbMode] = useState<{ mode?: string; label?: string }>({});
+  useEffect(() => {
+    fetch("/api/health").then((r) => r.json()).then(setDbMode).catch(() => {});
+  }, []);
+
   return (
     <aside className="w-60 shrink-0 border-r border-gray-200 flex flex-col h-screen sticky top-0 bg-white">
       {/* Logo */}
@@ -53,6 +60,18 @@ export default function Sidebar() {
           <div className="text-xs text-gray-400">HR Solution</div>
         </div>
       </div>
+
+      {/* 데이터 모드 배지 — 로컬(테스트) / 클라우드(실데이터) */}
+      {dbMode.mode && (
+        <div
+          className={`mx-3 mt-2.5 px-2 py-1 rounded-md text-[11px] text-center font-medium ${
+            dbMode.mode === "cloud" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+          }`}
+          title={`백엔드가 연결된 DB: ${dbMode.label || dbMode.mode}`}
+        >
+          데이터: {dbMode.mode === "cloud" ? "클라우드 (실데이터)" : "로컬 (테스트)"}
+        </div>
+      )}
 
       {/* Nav sections */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-5">

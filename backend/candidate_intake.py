@@ -151,6 +151,15 @@ async def process_message(db, msg: Dict) -> Dict:
     if is_internal_sender(email_addr):
         return {"action": "excluded", "reason": "internal sender", "sender_email": email_addr}
 
+    # 이미 candidates 본테이블에 등록된 발신자는 재감지하지 않음.
+    # 이메일은 대소문자·공백 차이가 나지 않게 양쪽 모두 정규화(LOWER/TRIM)해서 비교.
+    if email_addr:
+        cur = await db.execute(
+            "SELECT 1 FROM candidates WHERE LOWER(TRIM(email)) = ? LIMIT 1", (email_addr,)
+        )
+        if await cur.fetchone():
+            return {"action": "excluded", "reason": "already_candidate", "sender_email": email_addr}
+
     cls = await classify_message(msg)
     if cls["signal"] == "excluded":
         return {"action": "excluded", "reason": "no repo/wallet", **cls}
@@ -202,12 +211,14 @@ async def process_message(db, msg: Dict) -> Dict:
 async def process_messages(db, messages: List[Dict]) -> Dict:
     """여러 메일을 누적 처리하고 요약 반환. (등록·회신 없음)"""
     summary = {"created": 0, "updated": 0, "duplicate": 0, "excluded": 0,
-               "excluded_internal": 0, "wallet_filled": 0}
+               "excluded_internal": 0, "excluded_already_candidate": 0, "wallet_filled": 0}
     for msg in messages or []:
         res = await process_message(db, msg)
         summary[res["action"]] = summary.get(res["action"], 0) + 1
         if res.get("reason") == "internal sender":
             summary["excluded_internal"] += 1
+        if res.get("reason") == "already_candidate":
+            summary["excluded_already_candidate"] += 1
         if res.get("wallet_filled"):
             summary["wallet_filled"] += 1
     return summary

@@ -151,6 +151,23 @@ async def list_intake():
     return out
 
 
+@app.delete("/api/candidates/intake/{intake_id}")
+async def delete_intake(intake_id: int):
+    """감지됨(검토 대기) 항목을 사람이 명시적으로 삭제. staging(detected_applicants)에서만
+    지우고 candidates 본테이블은 절대 건드리지 않는다."""
+    db = await get_db()
+    cur = await db.execute("SELECT sender_email FROM detected_applicants WHERE id=?", (intake_id,))
+    row = await cur.fetchone()
+    if not row:
+        await db.close()
+        raise HTTPException(404, "detected applicant not found")
+    sender = dict(row).get("sender_email")
+    await db.execute("DELETE FROM detected_applicants WHERE id=?", (intake_id,))
+    await db.commit()
+    await db.close()
+    return {"deleted": True, "id": intake_id, "sender_email": sender}
+
+
 @app.post("/api/candidates/intake/{intake_id}/approve")
 async def approve_intake(intake_id: int):
     """운영자 '등록 승인'. 조건 충족 시에만 candidates에 등록한다.

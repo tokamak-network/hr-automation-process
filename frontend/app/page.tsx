@@ -73,6 +73,17 @@ export default function CandidatesPage() {
     setApprovingId(null);
   };
 
+  const handleDeleteIntake = async (item: IntakeItem) => {
+    if (!confirm(`감지된 "${item.sender_name || item.sender_email}" 건을 목록에서 삭제할까요?\n(감지 목록에서만 지웁니다. 등록된 후보는 영향 없음)`)) return;
+    setApprovingId(item.id);
+    try {
+      const res = await fetch(`${API}/api/candidates/intake/${item.id}`, { method: "DELETE" });
+      if (!res.ok) alert("삭제 실패");
+      await loadIntake();
+    } catch { alert("삭제 처리 실패"); }
+    setApprovingId(null);
+  };
+
   useEffect(() => { load(); loadIntake(); }, []);
 
   const triggerAnalysis = async (id: number) => {
@@ -213,13 +224,20 @@ export default function CandidatesPage() {
                         ? <span className="text-green-700">등록 가능</span>
                         : <span className="text-amber-600">{i.hold_reasons.join(", ")}</span>}
                     </td>
-                    <td className="py-2 px-3 text-right">
+                    <td className="py-2 px-3 text-right whitespace-nowrap">
                       <button
                         onClick={() => handleApprove(i)}
                         disabled={!i.ready_to_register || approvingId === i.id}
                         title={i.ready_to_register ? "Candidates에 등록" : i.hold_reasons.join(", ")}
                         className="text-xs px-2.5 py-1 rounded font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed">
                         {approvingId === i.id ? "등록 중..." : "등록 승인"}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteIntake(i)}
+                        disabled={approvingId === i.id}
+                        title="감지 목록에서 삭제 (등록된 후보는 영향 없음)"
+                        className="ml-1.5 text-xs px-2 py-1 rounded border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-50">
+                        삭제
                       </button>
                     </td>
                   </tr>
